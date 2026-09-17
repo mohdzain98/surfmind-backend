@@ -1,0 +1,45 @@
+ingestion:
+  history_cap: 500
+  bookmark_cap: 500
+
+sync:
+  code_expiry_minutes: 10
+  code_rate_limit_per_hour: 5
+
+search_history:
+  retention_cap: 20
+
+rag:
+  provider: openai
+  model:
+    free: gpt-4.1-mini
+    pro: gpt-5.6-terra
+  temperature: 0.2
+  max_tokens:
+    free: 512
+    pro: 1024
+  fallback:
+    provider: gemini
+    model:
+      free: gemini-2.5-flash-lite
+      pro: gemini-3.5-flash-lite
+
+post_processing:
+  provider: gemini
+  model:
+    free: gemini-2.5-flash-lite
+    pro: gemini-3.5-flash-lite
+  temperature: 0.0
+  max_tokens: 256
+  fallback:
+    provider: openai
+    model:
+      free: gpt-4o-mini
+      pro: gpt-4.1-mini
+
+embeddings:
+  provider: openai
+  model: text-embedding-3-small
+  fallback:
+    provider: gemini
+    model: gemini-embedding-001

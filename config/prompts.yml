@@ -1,4 +1,21 @@
 prompt:
+  section_summary:
+    system: |
+      You summarize one heading-scoped section of a web page for use as
+      search-embedding input. The summary is never shown to a user directly
+      — it exists purely to make semantic search match this section better.
+    user: |
+      Summarize the following section in 1-3 sentences, dense with the key
+      terms and facts a search query would need to match against. Do not
+      add information that isn't present in the content.
+
+      Heading path: {heading_path}
+
+      Content:
+      {content}
+
+      Summary:
+
   history:
     system: |
       You are a helpful assistant that help user find visited sites from browser history. The content provided is the retieved history according to the query. You provide the summary based on the content and URL provided.
@@ -60,7 +77,7 @@ prompt:
       - Do **not** provide information beyond the given context or hallucinate unknown facts.
 
   relevance: |
-    You are a relevance filtering assistant.
+    You are a strict relevance filtering assistant.
 
     The user has asked the following query:
     "{query}"
@@ -73,29 +90,35 @@ prompt:
 
     Note: Some blocks may come from bookmarks, where the content is only the page title.
     For such blocks, judge relevance using the Title and Source URL — do NOT penalise a
-    block just because its content is short or sparse.
+    block just because its content is short or sparse. That is about length, not about
+    whether the subject matches — a short block about the right subject is still relevant.
 
     Content blocks:
     {content_blocks}
 
-    Your task:
+    Your task: determine whether each block is actually *about* what the query is asking
+    for — not merely adjacent to it or mentioning it in passing.
 
-    1. Determine whether each content block is relevant to the user's query.
-    2. Use the Title, Source URL, and Content together when making your decision.
-    3. A block is relevant if it:
-      - Directly answers the query, OR
-      - Is strongly related to the topic, OR
-      - Contains key terms or semantically similar concepts in the Title or URL.
+    A block is relevant only if:
+    - Its Content substantively describes, answers, or is itself the subject the query
+      asks about, OR
+    - For sparse bookmark blocks (title/URL only, no real content), the Title/URL
+      unambiguously identify that subject.
 
-    4. A block is NOT relevant if:
-      - It discusses a completely unrelated topic.
-      - It belongs to a clearly unrelated domain (e.g., scholarships for a math query).
-      - Neither the Title, URL, nor Content has any connection to the query.
+    A block is NOT relevant if:
+    - The query's subject appears only as a passing mention, list item, or tangential
+      reference inside content that is actually about something else — e.g. a personal
+      portfolio/resume page that merely lists a project by name without describing it.
+      A keyword match alone is never sufficient on its own.
+    - It's about a different product, page, or topic — even one from the same person,
+      company, or brand family, or one that merely shares similar branding/domain.
+    - It belongs to a clearly unrelated domain (e.g., scholarships for a math query).
+    - Neither the Title, URL, nor Content substantively connects to the query's subject.
 
-    Important Rules:
-    - Do NOT remove blocks that are partially relevant.
-    - Do NOT remove blocks that contain the correct topic but limited detail.
-    - Only remove clearly irrelevant blocks.
+    When you're unsure whether a mention is substantive or just a passing reference,
+    treat it as NOT relevant. A false positive (keeping an off-topic source) is worse
+    than a false negative here — only sources that actually inform the answer should be
+    cited back to the user.
 
     Output Format Rules:
     - Respond ONLY with a JSON-style list of integers.
@@ -117,6 +140,20 @@ prompt:
             Content: "Google helps users search the web."
 
       Answer: [2]
+
+      Query: "a chrome extension which searches history and bookmarks"
+      Content Blocks:
+        1.  Title: "SurfMind — Smarter Browsing"
+            Source: surfmind.docschat.in
+            Content: "SurfMind is a Chrome extension that lets you search your browsing history and bookmarks instantly."
+        2.  Title: "Mohd Zain | Data Scientist"
+            Source: mohdzain.com
+            Content: "Projects: GATE 2022 prep notes, SurfMind, portfolio site redesign."
+        3.  Title: "Docschat — AI Document Intelligence"
+            Source: docschat.in
+            Content: "Docschat lets you chat with your uploaded documents using AI."
+
+      Answer: [2,3]
 
       Query: "Document chatting website"
       Content blocks:

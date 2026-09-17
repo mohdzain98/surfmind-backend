@@ -29,7 +29,7 @@ jobs:
           git reset --hard origin/main
 
           echo "Cleaning untracked files (excluding persistent data)..."
-          git clean -fd -e data/ -e logs/ -e senv/
+          git clean -fd -e data/ -e logs/ -e senv/ -e requirements.lock
 
           echo "Activating virtual environment..."
           source senv/bin/activate
