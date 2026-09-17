@@ -1,0 +1,75 @@
+# .github/workflows/staging.yml
+name: Deploy Staging
+
+on:
+  push:
+    branches: [staging]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Deploy using ssh
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: 22
+        script: |
+          set -e
+
+          mkdir -p surfmind
+          cd surfmind
+
+          if [ ! -d surfmind-backend-staging/.git ]; then
+            echo "No repo at surfmind-backend-staging yet — cloning..."
+            git clone git@github.com:mohdzain98/surfmind-backend.git surfmind-backend-staging
+          else
+            echo "Repo already exists — fetching and resetting to origin/staging..."
+            cd surfmind-backend-staging
+            git fetch origin
+            git checkout staging
+            git reset --hard origin/staging
+            git clean -fd -e data/ -e logs/ -e senv/ -e .env -e requirements.lock
+            cd ..
+          fi
+
+          cd surfmind-backend-staging
+
+          if [ ! -f .env ]; then
+            echo ".env is missing — copy it onto the server manually before deploying (DATABASE_URL, REDIS_HOST/PORT, OPENAI_API_KEY, GEMINI_API_KEY, ENVIRONMENT=production). Aborting."
+            exit 1
+          fi
+
+          if [ ! -d senv ]; then
+            echo "No virtualenv yet — creating one..."
+            # Server has python3.12, not the python3.11 pyproject.toml
+            # targets locally — mainstream deps here (FastAPI, SQLAlchemy
+            # async, asyncpg, pgvector) have solid 3.12 support.
+            python3 -m venv senv
+          fi
+
+          echo "Activating virtual environment..."
+          source senv/bin/activate
+
+          echo "Checking dependencies..."
+          if [ ! -f requirements.lock ] || ! cmp -s requirements.txt requirements.lock; then
+            echo "Installing dependencies..."
+            pip install -r requirements.txt
+            cp requirements.txt requirements.lock
+          else
+            echo "Dependencies unchanged. Skipping install."
+          fi
+
+          echo "Running database migrations..."
+          alembic upgrade head
+
+          echo "Reloading service (zero downtime)..."
+          sudo systemctl restart surfmind-staging.service || {
+            echo "Reload failed. Restarting service..."
+            sudo systemctl restart surfmind-staging.service
+          }
+
+          echo "Deployment completed successfully."

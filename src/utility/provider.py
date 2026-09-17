@@ -11,9 +11,9 @@ from langchain_core.embeddings import Embeddings as LangChainEmbeddings
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_openai import OpenAIEmbeddings
 
-from src.models.ai_models import Models
 from src.utility.logger import AppLogger
 from src.utility.path_finder import Finder
+from src.utility.settings import settings
 
 paths = Finder()
 env_path = paths.get_directory(name="root") / ".env"
@@ -53,9 +53,23 @@ class SecretsProvider:
 
         return key
 
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def get_database_url() -> str:
+        """Return the Postgres connection URL from the environment.
+        Uses caching to avoid repeated lookups.
+        """
+        url = os.getenv("DATABASE_URL")
 
-DEFAULT_OPENAI_MODEL = "text-embedding-3-small"
-DEFAULT_GEMINI_MODEL = "models/gemini-embedding-001"
+        if not url:
+            raise RuntimeError("DATABASE_URL is not set in environment variables")
+
+        return url
+
+
+# Pinned so Gemini and OpenAI embeddings share one width — required for both
+# to write/read the same pgvector column via FallbackEmbeddings.
+DEFAULT_EMBEDDING_DIM = 1536
 
 
 class FallbackEmbeddings(LangChainEmbeddings):
@@ -134,40 +148,39 @@ class EmbeddingsProvider:
     """
 
     @staticmethod
-    @lru_cache(maxsize=4)
-    def get_embeddings(
-        provider: Models = Models.default(),
-        model_name: str | None = None,
-    ):
-        """
-        Returns a cached embeddings instance.
-        OpenAI embeddings automatically fall back to Gemini on quota failures.
-        """
-
-        if provider == Models.GPT:
-            model = model_name or DEFAULT_OPENAI_MODEL
-            logger.info("Loaded OpenAI embeddings with Gemini fallback: %s", model)
-            primary = OpenAIEmbeddings(
-                model=model,
-                api_key=SecretsProvider.get_openai_api_key(),
+    def _build_embeddings(provider: str, model: str) -> LangChainEmbeddings:
+        """Construct a bare (non-fallback-wrapped) embeddings client."""
+        if provider == "openai":
+            return OpenAIEmbeddings(
+                model=model, api_key=SecretsProvider.get_openai_api_key()
             )
-            fallback = GoogleGenerativeAIEmbeddings(
-                model=DEFAULT_GEMINI_MODEL,
-                google_api_key=SecretsProvider.get_gemini_api_key(),
-            )
-            return FallbackEmbeddings(primary=primary, fallback=fallback)
-
-        if provider == Models.GEMINI:
-            model = model_name or DEFAULT_GEMINI_MODEL
-            logger.info("Loaded Gemini embeddings with OpenAI fallback: %s", model)
-            primary = GoogleGenerativeAIEmbeddings(
+        if provider == "gemini":
+            return GoogleGenerativeAIEmbeddings(
                 model=model,
                 google_api_key=SecretsProvider.get_gemini_api_key(),
+                output_dimensionality=DEFAULT_EMBEDDING_DIM,
             )
-            fallback = OpenAIEmbeddings(
-                model=DEFAULT_OPENAI_MODEL,
-                api_key=SecretsProvider.get_openai_api_key(),
-            )
-            return FallbackEmbeddings(primary=primary, fallback=fallback)
-
         raise ValueError(f"Unsupported embeddings provider: {provider}")
+
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def get_default_embeddings() -> "FallbackEmbeddings":
+        """Return the settings-configured embeddings client (config/params.yml).
+
+        Wraps the primary provider with automatic fallback to the
+        settings-configured fallback provider on quota/rate-limit errors.
+        """
+        primary = EmbeddingsProvider._build_embeddings(
+            settings.embeddings_provider, settings.embeddings_model
+        )
+        fallback = EmbeddingsProvider._build_embeddings(
+            settings.embeddings_fallback_provider, settings.embeddings_fallback_model
+        )
+        logger.info(
+            "Loaded %s embeddings (%s) with %s fallback (%s)",
+            settings.embeddings_provider,
+            settings.embeddings_model,
+            settings.embeddings_fallback_provider,
+            settings.embeddings_fallback_model,
+        )
+        return FallbackEmbeddings(primary=primary, fallback=fallback)

@@ -5,3 +5,10 @@
 notebooks/
 __pycache__/
 *.py[cod]
+.venv
+.claude
+.DS_Store
+docs/task_and_plans
+data
+config/params.dev.yml
+load_tests/

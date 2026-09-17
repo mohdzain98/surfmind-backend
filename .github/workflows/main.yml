@@ -29,7 +29,12 @@ jobs:
           git reset --hard origin/main
 
           echo "Cleaning untracked files (excluding persistent data)..."
-          git clean -fd -e data/ -e logs/ -e senv/
+          git clean -fd -e data/ -e logs/ -e senv/ -e requirements.lock -e .env
+
+          if [ ! -f .env ]; then
+            echo ".env is missing — copy it onto the server manually before deploying (DATABASE_URL, REDIS_HOST/PORT, OPENAI_API_KEY, GEMINI_API_KEY, ENVIRONMENT=production). Aborting."
+            exit 1
+          fi
 
           echo "Activating virtual environment..."
           source senv/bin/activate
@@ -42,6 +47,9 @@ jobs:
           else
             echo "Dependencies unchanged. Skipping install."
           fi
+
+          echo "Running database migrations..."
+          alembic upgrade head
 
           echo "Reloading service (zero downtime)..."
           sudo systemctl restart surfmind.service || {

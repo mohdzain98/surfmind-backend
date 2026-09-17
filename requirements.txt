@@ -7,9 +7,16 @@ langchain_openai
 langchain_community
 langchain_google_genai
 rank_bm25
-faiss-cpu
 redis
 termcolor
 google-api-core
 tiktoken
 pre-commit
+sqlalchemy
+greenlet
+asyncpg
+pgvector
+alembic
+rich
+PyYAML
+locust

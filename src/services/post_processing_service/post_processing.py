@@ -4,12 +4,13 @@ Work as LLM as a Judge to remove unrequired outputs from final response
 
 import ast
 from typing import Any, List
+
 from langchain_core.prompts import PromptTemplate
-from src.services.llm_service.llm_provider import LLMProvider
+
 from src.models.core import Document
-from src.models.ai_models import Models
-from src.utility.utils import Utility
+from src.services.llm_service.llm_provider import LLMProvider
 from src.utility.logger import AppLogger
+from src.utility.utils import Utility
 
 logger = AppLogger.get_logger(__name__)
 
@@ -81,9 +82,8 @@ class PostProcessing:
         """Filter documents by LLM-assessed relevance.
         Returns a filtered list of relevant documents.
         """
-        llms = self.llm_provider.all()
-        llm_gemini = llms.get(Models.GEMINI)
-        llm_gpt = llms.get(Models.GPT)
+        llm_primary = self.llm_provider.get_post_processing_llm()
+        llm_fallback = self.llm_provider.get_post_processing_fallback_llm()
         top_doc = docs[0]
         source = top_doc.metadata.get("source")
         cleaned_docs = self.clean_docs(source, docs)
@@ -94,19 +94,19 @@ class PostProcessing:
             input_variables=["query", "content_blocks"], template=relevant_prompt
         )
         try:
-            ans = llm_gemini.invoke(
+            ans = llm_primary.invoke(
                 relevance_prompt.invoke({"query": ques, "content_blocks": joined_docs})
             )
         except Exception as e:
-            logger.warning(f"Gemini Failed in Post Processing, reason: {e}")
-            ans = llm_gpt.invoke(
+            logger.warning(f"Primary LLM failed in post-processing, reason: {e}")
+            ans = llm_fallback.invoke(
                 relevance_prompt.invoke({"query": ques, "content_blocks": joined_docs})
             )
         try:
             irrelevant_indices = ast.literal_eval(ans.content.strip())
             if not isinstance(irrelevant_indices, list):
                 irrelevant_indices = []
-        except Exception as e:
+        except Exception:
             logger.error(f"Failed to parse LLM output: {ans.content}")
             irrelevant_indices = []
         filtered_docs = whole_doc  # Start with all documents

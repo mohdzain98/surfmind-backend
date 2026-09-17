@@ -21,6 +21,19 @@ class Prompts:
         """
         self.utility = Utility()
 
+    def section_summary_prompt(self):
+        """Build the pro-tier section-summary prompt template.
+        Returns a chat prompt ready for invocation with heading_path/content.
+        """
+        prompts = self.utility.load_prompts()
+        template_S = prompts["prompt"]["section_summary"]["system"]
+        system_message_prompt = SystemMessagePromptTemplate.from_template(template_S)
+
+        template = prompts["prompt"]["section_summary"]["user"]
+        prompt = ChatPromptTemplate.from_messages([system_message_prompt, template])
+
+        return prompt
+
     def history_prompt(
         self,
     ):
