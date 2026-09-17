@@ -9,6 +9,7 @@ __pycache__/
 .claude
 .DS_Store
 docs/task_and_plans
+docs/analysis
 data
 config/params.dev.yml
 load_tests/
