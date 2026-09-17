@@ -9,7 +9,9 @@ from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -65,6 +67,12 @@ class Page(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
+    )
+    # Jev gives a real confidence score; the Gemini fallback path doesn't,
+    # so this stays unset for fallback-classified pages.
+    category_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     sections: Mapped[list["PageSection"]] = relationship(
         back_populates="page", cascade="all, delete-orphan"
@@ -138,6 +146,34 @@ class SectionEmbedding(Base):
     section: Mapped["PageSection"] = relationship(back_populates="embedding")
 
 
+class Category(Base):
+    """A user-defined cluster pages can be classified into.
+
+    Only exists at all once the account has enabled categorization at
+    least once (see `SyncAccount.categorization_enabled`) — a brand-new
+    account has zero rows here. Unique per `(user_id, name)`. Deleting a
+    category uncategorizes its pages via `Page.category_id`'s
+    `ON DELETE SET NULL`, not a cascade — the pages themselves survive.
+    """
+
+    __tablename__ = "categories"
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_categories_user_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("sync_accounts.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    # Required — this is what classification runs against.
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class SyncAccount(Base):
     """A shared identity that one or more browsers can be linked to.
 
@@ -150,6 +186,11 @@ class SyncAccount(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     tier: Mapped[str] = mapped_column(String, nullable=False, default="free")
+    # Opt-in categorization feature flag — off by default, flipped by the
+    # enable/disable endpoints, never touched by user creation.
+    categorization_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

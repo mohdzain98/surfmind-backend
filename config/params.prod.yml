@@ -43,3 +43,14 @@ embeddings:
   fallback:
     provider: gemini
     model: gemini-embedding-001
+
+classification:
+  category_limit:
+    free: 4
+    pro: 20
+  jev_model: jev-latest
+  fallback:
+    provider: gemini
+    model:
+      free: gemini-2.5-flash-lite
+      pro: gemini-3.5-flash-lite

@@ -176,5 +176,24 @@ class Settings(BaseSettings):
         """Fallback embeddings model (embeddings.fallback.model) — not tier-split."""
         return self._params["embeddings"]["fallback"]["model"]
 
+    @property
+    def classification_jev_model(self) -> str:
+        """Primary Jev model for page classification (classification.jev_model)."""
+        return self._params["classification"]["jev_model"]
+
+    @property
+    def classification_fallback_provider(self) -> str:
+        """Fallback LLM provider for classification (fallback.provider)."""
+        return self._params["classification"]["fallback"]["provider"]
+
+    @property
+    def classification_fallback_model(self) -> str:
+        """Classification fallback model, free tier (fallback.model.free)."""
+        return self._free("classification", "fallback", "model")
+
+    def category_limit(self, tier: str) -> int:
+        """Max categories for `tier` (classification.category_limit.<tier>)."""
+        return self._params["classification"]["category_limit"][tier]
+
 
 settings = Settings()

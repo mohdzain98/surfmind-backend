@@ -30,8 +30,10 @@ async def clear_all_data(sync_account_id: int, db: AsyncSession) -> None:
     """Full wipe: all pages (history + bookmarks), sections, embeddings,
     and search history.
 
-    Categorization doesn't exist in this codebase (reverted) — there's
-    nothing to clear or re-seed there yet.
+    Deleting `pages` rows naturally drops their `category_id` along with
+    them, but `categories` rows themselves and `categorization_enabled`
+    are deliberately left untouched — whether "Clear Data" should also
+    reset categorization is a separate product decision, not made here.
     """
     await db.execute(delete(Page).where(Page.user_id == sync_account_id))
     await db.execute(

@@ -20,3 +20,5 @@ alembic
 rich
 PyYAML
 locust
+typesafe-sdk
+celery

@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+from src.controller.category_controller import router as category_router
 from src.controller.core_controller import redis_client
 from src.controller.core_controller import router as core_router
 from src.controller.sync_controller import router as sync_router
@@ -63,6 +64,7 @@ app.add_middleware(
 
 app.include_router(core_router)
 app.include_router(sync_router)
+app.include_router(category_router)
 
 
 @app.get("/", tags=["Health"])

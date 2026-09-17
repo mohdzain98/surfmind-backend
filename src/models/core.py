@@ -195,3 +195,58 @@ class SyncStatusRequest(BaseModel):
     browser_uuid: str = Field(
         validation_alias=AliasChoices("browser_uuid", "browserUuid")
     )
+
+
+class CategoryListRequest(BaseModel):
+    """Request schema for listing a browser's categories + enabled status.
+
+    POST, not GET — same MV3 Origin-header reasoning as SyncStatusRequest.
+    """
+
+    browser_uuid: str = Field(
+        validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )
+
+
+class EnableCategorizationRequest(BaseModel):
+    """Request schema for turning on categorization for an account."""
+
+    browser_uuid: str = Field(
+        validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )
+
+
+class DisableCategorizationRequest(BaseModel):
+    """Request schema for turning off categorization for an account."""
+
+    browser_uuid: str = Field(
+        validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )
+
+
+class CreateCategoryRequest(BaseModel):
+    """Request schema for creating a custom category."""
+
+    browser_uuid: str = Field(
+        validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )
+    name: str
+    description: str
+
+
+class ClassifyRequest(BaseModel):
+    """Request schema for triggering (or re-triggering) page classification."""
+
+    browser_uuid: str = Field(
+        validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )
+    reclassify_all: bool = False
+
+
+class ClassifyStatusRequest(BaseModel):
+    """Request schema for polling a classification task's status.
+
+    POST, not GET — same MV3 Origin-header reasoning as SyncStatusRequest.
+    """
+
+    task_id: str

@@ -76,6 +76,13 @@ class LLMProvider:
             settings.post_processing_max_tokens,
             rate_limiter,
         )
+        self.classification_fallback_llm = self._build_chat_model(
+            settings.classification_fallback_provider,
+            settings.classification_fallback_model,
+            temperature=0.0,
+            max_tokens=64,
+            rate_limiter=rate_limiter,
+        )
 
     @staticmethod
     def _build_chat_model(
@@ -135,3 +142,7 @@ class LLMProvider:
     def get_post_processing_fallback_llm(self) -> BaseChatModel:
         """Return the settings-configured fallback post-processing judge model."""
         return self.post_processing_fallback_llm
+
+    def get_classification_fallback_llm(self) -> BaseChatModel:
+        """Return the settings-configured fallback page-classification model."""
+        return self.classification_fallback_llm
