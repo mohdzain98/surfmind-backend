@@ -208,6 +208,22 @@ class CategoryListRequest(BaseModel):
     )
 
 
+class CategoryPagesRequest(BaseModel):
+    """Request schema for listing pages grouped by category."""
+
+    browser_uuid: str = Field(
+        validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )
+
+
+class SearchAnalyticsRequest(BaseModel):
+    """Request schema for search-volume-by-category analytics."""
+
+    browser_uuid: str = Field(
+        validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )
+
+
 class EnableCategorizationRequest(BaseModel):
     """Request schema for turning on categorization for an account."""
 

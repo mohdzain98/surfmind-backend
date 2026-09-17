@@ -20,19 +20,23 @@ from src.db.models import SyncAccount
 from src.db.session import get_db
 from src.models.core import (
     CategoryListRequest,
+    CategoryPagesRequest,
     ClassifyRequest,
     ClassifyStatusRequest,
     CreateCategoryRequest,
     DisableCategorizationRequest,
     EnableCategorizationRequest,
+    SearchAnalyticsRequest,
 )
 from src.services.category_service.category import (
     create_category,
     delete_category,
     disable_categorization,
     enable_categorization,
+    get_search_category_analytics,
     is_categorization_enabled,
     list_categories,
+    list_categorized_pages,
 )
 from src.services.classification_service.tasks import (
     classify_pages_task,
@@ -65,6 +69,30 @@ async def list_categories_route(
     enabled = await is_categorization_enabled(sync_account_id, db)
     categories = await list_categories(sync_account_id, db)
     return {"enabled": enabled, "categories": categories}
+
+
+@router.post("/pages", response_model=Dict[str, Any])
+async def list_categorized_pages_route(
+    payload: CategoryPagesRequest, db: AsyncSession = Depends(get_db)
+):
+    """Every page for this account, grouped by category — the UI's "here
+    are all the pages classified as Work" view."""
+    sync_account_id = await resolve_sync_account_id(
+        browser_uuid=payload.browser_uuid, db=db
+    )
+    return await list_categorized_pages(sync_account_id, db)
+
+
+@router.post("/search-analytics", response_model=Dict[str, Any])
+async def search_analytics_route(
+    payload: SearchAnalyticsRequest, db: AsyncSession = Depends(get_db)
+):
+    """How many past searches' matched sources fall into each category."""
+    sync_account_id = await resolve_sync_account_id(
+        browser_uuid=payload.browser_uuid, db=db
+    )
+    by_category = await get_search_category_analytics(sync_account_id, db)
+    return {"by_category": by_category}
 
 
 @router.post("/create", response_model=Dict[str, Any])
