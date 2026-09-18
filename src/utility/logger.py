@@ -175,6 +175,15 @@ class AppLogger:
             )
             root_logger.addHandler(file_handler)
 
+        # Persists the same WARNING+ records to Postgres (app_logs), so the
+        # admin API can surface them — see db_log_handler for why this is a
+        # separate sync/queued path rather than the app's async engine.
+        from src.utility.db_log_handler import get_queue_handler
+
+        db_queue_handler = get_queue_handler()
+        db_queue_handler.setLevel(logging.WARNING)
+        root_logger.addHandler(db_queue_handler)
+
     @staticmethod
     def get_logger(name: str | None = None) -> "DebugAwareLogger":
         """

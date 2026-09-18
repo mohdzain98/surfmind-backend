@@ -135,7 +135,12 @@ async def generate_code(browser_uuid: str, db: AsyncSession) -> Tuple[str, datet
                 SyncCode.created_at >= window_start,
             )
         )
-        if count_result.scalar_one() >= settings.sync_code_rate_limit_per_hour:
+        current_count = count_result.scalar_one()
+        if current_count >= settings.sync_code_rate_limit_per_hour:
+            logger.warning(
+                "Sync code rate limit hit",
+                extra={"sync_account_id": sync_account_id, "count": current_count},
+            )
             raise RateLimitExceeded(
                 f"Rate limit exceeded for account {sync_account_id}"
             )

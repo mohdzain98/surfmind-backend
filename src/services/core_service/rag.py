@@ -27,6 +27,7 @@ from src.services.llm_service.prompt_builder import Prompts
 from src.utility.logger import AppLogger
 from src.utility.provider import EmbeddingsProvider as ef
 from src.utility.settings import settings
+from src.utility.token_usage_callback import TokenUsageCallback
 
 logger = AppLogger.get_logger(__name__)
 
@@ -508,27 +509,52 @@ class LLMRag:
         return pchain
 
     def _invoke_chain(
-        self, context: str, date: Optional[str], url: str, flag: str, chain: Runnable
+        self,
+        context: str,
+        date: Optional[str],
+        url: str,
+        flag: str,
+        chain: Runnable,
+        callback: TokenUsageCallback,
     ) -> str:
         """Invoke a chain with the correct input mapping.
         Includes date for history/combined and omits it for bookmarks.
         """
+        config = {"callbacks": [callback]}
         if flag in ("history", "combined"):
-            return chain.invoke({"context": context, "date": date, "url": url})
-        return chain.invoke({"context": context, "url": url})
+            return chain.invoke(
+                {"context": context, "date": date, "url": url}, config=config
+            )
+        return chain.invoke({"context": context, "url": url}, config=config)
 
     def safe_invoke_llm_response(
         self, context: str, date: Optional[str], url: str, flag: str = "history"
-    ) -> Tuple[Any, str]:
+    ) -> Tuple[Any, str, Dict[str, int]]:
         """Invoke the LLM response chain with fallback.
-        Returns the response text and model identifier used.
+
+        Returns the response text, the provider identifier used, and a
+        `{"model": ..., "input_tokens": ..., "output_tokens": ...}` dict for
+        `LLMUsage` recording — usage is best-effort (zeroed on extraction
+        failure, see `TokenUsageCallback`), never blocks the actual response.
         """
         try:
+            callback = TokenUsageCallback()
             chain = self._llm_response(llm=self.base_llm, flag=flag)
             result = self._invoke_chain(
-                context=context, date=date, url=url, flag=flag, chain=chain
+                context=context,
+                date=date,
+                url=url,
+                flag=flag,
+                chain=chain,
+                callback=callback,
             )
-            return result, settings.rag_provider
+            usage = {
+                "provider": settings.rag_provider,
+                "model": settings.rag_model,
+                "input_tokens": callback.total_input_tokens,
+                "output_tokens": callback.total_output_tokens,
+            }
+            return result, settings.rag_provider, usage
         except Exception as exc:
             logger.warning(
                 "Primary LLM failed, falling back to %s: %s",
@@ -536,12 +562,24 @@ class LLMRag:
                 exc,
             )
             try:
+                callback = TokenUsageCallback()
                 llm_fallback = self.llm_provider.get_rag_fallback_llm()
                 chain = self._llm_response(llm=llm_fallback, flag=flag)
                 result = self._invoke_chain(
-                    context=context, date=date, url=url, flag=flag, chain=chain
+                    context=context,
+                    date=date,
+                    url=url,
+                    flag=flag,
+                    chain=chain,
+                    callback=callback,
                 )
-                return result, settings.rag_fallback_provider
+                usage = {
+                    "provider": settings.rag_fallback_provider,
+                    "model": settings.rag_fallback_model,
+                    "input_tokens": callback.total_input_tokens,
+                    "output_tokens": callback.total_output_tokens,
+                }
+                return result, settings.rag_fallback_provider, usage
             except Exception as e:
                 logger.error("Both LLM failed")
                 raise RuntimeError("All LLM providers failed") from e

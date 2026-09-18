@@ -5,6 +5,7 @@ Core API routes.
 import asyncio
 import json
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
@@ -229,9 +230,11 @@ async def search(
     history: dict = json.loads(user_data)
     try:
         history_data = history.get("data", [])
+        start = time.monotonic()
         response = await service.invoke_rag(
             data=payload, history=history_data, user_id=str(sync_account_id), db=db
         )
+        duration_ms = int((time.monotonic() - start) * 1000)
         if response.success:
             background_tasks.add_task(
                 persist_search,
@@ -240,6 +243,7 @@ async def search(
                 flag=payload.flag,
                 answer=response.result,
                 sources=response.docs,
+                duration_ms=duration_ms,
             )
         return response
     except Exception as exc:
@@ -290,6 +294,8 @@ async def search_stream(
         history_data = json.loads(user_data).get("data", []) if user_data else []
         bookmark_data = []
 
+    stream_start = time.monotonic()
+
     async def event_stream():
         try:
             if payload.flag == "combined":
@@ -322,12 +328,14 @@ async def search_stream(
     async def _persist_after_stream() -> None:
         data = result_holder.get("data")
         if data and data.get("success"):
+            duration_ms = int((time.monotonic() - stream_start) * 1000)
             await persist_search(
                 user_id=str(sync_account_id),
                 query=payload.query,
                 flag=payload.flag,
                 answer=data.get("result", ""),
                 sources=data.get("docs", []),
+                duration_ms=duration_ms,
             )
 
     return StreamingResponse(

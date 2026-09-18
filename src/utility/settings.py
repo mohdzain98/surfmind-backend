@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     redis_host: str = Field(default="localhost", validation_alias="REDIS_HOST")
     redis_port: int = Field(default=6379, validation_alias="REDIS_PORT")
     database_url: str = Field(default="", validation_alias="DATABASE_URL")
+    admin_jwt_secret: str = Field(default="", validation_alias="ADMIN_JWT_SECRET")
 
     @property
     def _params(self) -> Dict[str, Any]:
@@ -90,6 +91,11 @@ class Settings(BaseSettings):
     def sync_code_rate_limit_per_hour(self) -> int:
         """Max codes generated per account per hour (sync.code_rate_limit_per_hour)."""
         return self._params["sync"]["code_rate_limit_per_hour"]
+
+    @property
+    def admin_token_expiry_minutes(self) -> int:
+        """Admin JWT TTL in minutes (admin.token_expiry_minutes)."""
+        return self._params["admin"]["token_expiry_minutes"]
 
     @property
     def search_history_retention_cap(self) -> int:
