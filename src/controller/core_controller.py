@@ -53,7 +53,7 @@ router = APIRouter(prefix="/v1", tags=["Core"])
 
 
 async def _ingest_with_own_session(
-    items: List[HistoryItem], sync_account_id: str, flag: str
+    items: List[HistoryItem], sync_account_id: str, flag: str, browser_uuid: str
 ) -> None:
     """Run one flag's `ingest_batch` in its own `AsyncSession`.
 
@@ -66,7 +66,13 @@ async def _ingest_with_own_session(
     """
     try:
         async with async_session_factory() as db:
-            await ingest_batch(items=items, user_id=sync_account_id, flag=flag, db=db)
+            await ingest_batch(
+                items=items,
+                user_id=sync_account_id,
+                flag=flag,
+                browser_uuid=browser_uuid,
+                db=db,
+            )
     except Exception as exc:
         logger.warning("Failed to persist %s embeddings to Postgres: %s", flag, exc)
 
@@ -77,20 +83,30 @@ async def _persist_embeddings(
     """Ingest a save-data payload into Postgres (entries + embeddings).
 
     Keyed by the resolved `sync_account_id`, not the raw browser id, so
-    linked browsers share one history pool, cap, and pgvector index.
-    Combined mode runs history and bookmark ingestion concurrently (each
-    in its own session) instead of sequentially, roughly halving the
-    latency a pre-search flush blocks on.
+    linked browsers share one history pool, cap, and pgvector index. The
+    raw browser id (`payload.user_id`) is still threaded through
+    separately as `source_browser_uuid` on each new page, for cross-
+    browser result attribution. Combined mode runs history and bookmark
+    ingestion concurrently (each in its own session) instead of
+    sequentially, roughly halving the latency a pre-search flush blocks on.
     """
     if payload.flag == "combined":
         await asyncio.gather(
-            _ingest_with_own_session(payload.data, sync_account_id, "history"),
-            _ingest_with_own_session(payload.bookmarks, sync_account_id, "bookmark"),
+            _ingest_with_own_session(
+                payload.data, sync_account_id, "history", payload.user_id
+            ),
+            _ingest_with_own_session(
+                payload.bookmarks, sync_account_id, "bookmark", payload.user_id
+            ),
         )
     else:
         try:
             await ingest_batch(
-                items=payload.data, user_id=sync_account_id, flag=payload.flag, db=db
+                items=payload.data,
+                user_id=sync_account_id,
+                flag=payload.flag,
+                browser_uuid=payload.user_id,
+                db=db,
             )
         except Exception as exc:
             logger.warning("Failed to persist embeddings to Postgres: %s", exc)

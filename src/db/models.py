@@ -65,6 +65,12 @@ class Page(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # Which linked browser first contributed this page — set on insert
+    # only, never overwritten on a later resync, so attribution reflects
+    # the original contributor even if a different linked browser
+    # revisits the same page. NULL for pre-existing rows from an account
+    # that ever had more than one browser (no way to know retroactively).
+    source_browser_uuid: Mapped[str | None] = mapped_column(String, nullable=True)
 
     sections: Mapped[list["PageSection"]] = relationship(
         back_populates="page", cascade="all, delete-orphan"

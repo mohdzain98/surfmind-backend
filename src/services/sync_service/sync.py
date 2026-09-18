@@ -16,7 +16,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models import SyncAccount, SyncCode, User
+from src.db.models import Page, SyncAccount, SyncCode, User
+from src.services.ingestion_service.ingestion import _trim_to_cap
 from src.utility.logger import AppLogger
 from src.utility.settings import settings
 
@@ -157,6 +158,59 @@ async def generate_code(browser_uuid: str, db: AsyncSession) -> Tuple[str, datet
     raise RuntimeError("Failed to generate a unique sync code")
 
 
+async def _migrate_browser_pages(
+    old_account_id: int, new_account_id: int, browser_uuid: str, db: AsyncSession
+) -> None:
+    """Reassign a browser's pre-pairing pages onto its new shared account.
+
+    Scoped to this browser's own contributions (`source_browser_uuid`), not
+    every page on `old_account_id` — that old account might itself already
+    have other browsers linked to it, and only this one browser's data
+    should move. On a `(user_id, url_hash, flag)` collision (both accounts
+    independently visited the same URL before pairing), keeps whichever
+    page was visited more recently and drops the other — cascades to its
+    sections/embeddings — consistent with this codebase's existing
+    "recency wins" retention philosophy (`_trim_to_cap` already evicts
+    oldest-first).
+    """
+    result = await db.execute(
+        select(Page).where(
+            Page.user_id == old_account_id,
+            Page.source_browser_uuid == browser_uuid,
+        )
+    )
+    pages_to_migrate = result.scalars().all()
+
+    for page in pages_to_migrate:
+        try:
+            async with db.begin_nested():
+                await db.execute(
+                    update(Page)
+                    .where(Page.id == page.id)
+                    .values(user_id=new_account_id)
+                )
+        except IntegrityError:
+            existing = await db.execute(
+                select(Page).where(
+                    Page.user_id == new_account_id,
+                    Page.url_hash == page.url_hash,
+                    Page.flag == page.flag,
+                )
+            )
+            existing_page = existing.scalar_one()
+            if page.visited_at > existing_page.visited_at:
+                async with db.begin_nested():
+                    await db.execute(delete(Page).where(Page.id == existing_page.id))
+                    await db.execute(
+                        update(Page)
+                        .where(Page.id == page.id)
+                        .values(user_id=new_account_id)
+                    )
+            else:
+                async with db.begin_nested():
+                    await db.execute(delete(Page).where(Page.id == page.id))
+
+
 async def redeem_code(code: str, browser_uuid: str, db: AsyncSession) -> int:
     """Repoint this browser onto the code's sync account.
 
@@ -191,6 +245,19 @@ async def redeem_code(code: str, browser_uuid: str, db: AsyncSession) -> int:
             raise InvalidSyncCode("Code already used")
         raise InvalidSyncCode("Code expired")
 
+    # Migrate any pages this browser already ingested before pairing —
+    # otherwise they'd stay stranded under its old (now-unreachable) solo
+    # account id, since _set_sync_account below only repoints identity
+    # resolution going forward, not already-persisted data.
+    existing = await db.execute(
+        select(User.sync_account_id).where(User.browser_uuid == browser_uuid)
+    )
+    old_account_id = existing.scalar_one_or_none()
+    if old_account_id is not None and old_account_id != sync_account_id:
+        await _migrate_browser_pages(old_account_id, sync_account_id, browser_uuid, db)
+        await _trim_to_cap(user_id=str(sync_account_id), flag="history", db=db)
+        await _trim_to_cap(user_id=str(sync_account_id), flag="bookmark", db=db)
+
     await _set_sync_account(browser_uuid, sync_account_id, db)
     await db.commit()
     return sync_account_id
@@ -199,11 +266,32 @@ async def redeem_code(code: str, browser_uuid: str, db: AsyncSession) -> int:
 async def unlink(browser_uuid: str, db: AsyncSession) -> int:
     """Repoint this browser onto a fresh solo sync account.
 
-    Other browsers still linked to the previous account are untouched.
+    Other browsers still linked to the previous account are untouched. Takes
+    this browser's own contributed pages with it (matched via
+    `source_browser_uuid`) — otherwise unlinking would silently strand the
+    browser's own history on the shared account it's leaving, with no way
+    back. The new account is freshly created and empty, so unlike pairing's
+    `_migrate_browser_pages`, there's no possible url_hash/flag collision to
+    resolve here — a plain reassignment is safe.
     """
+    existing = await db.execute(
+        select(User.sync_account_id).where(User.browser_uuid == browser_uuid)
+    )
+    old_account_id = existing.scalar_one_or_none()
+
     account = SyncAccount()
     db.add(account)
     await db.flush()
+
+    if old_account_id is not None:
+        await db.execute(
+            update(Page)
+            .where(
+                Page.user_id == old_account_id,
+                Page.source_browser_uuid == browser_uuid,
+            )
+            .values(user_id=account.id)
+        )
 
     await _set_sync_account(browser_uuid, account.id, db)
     await db.commit()

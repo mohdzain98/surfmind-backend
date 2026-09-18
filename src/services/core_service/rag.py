@@ -243,6 +243,7 @@ class HybridRAGService:
                 SELECT * FROM (
                     SELECT DISTINCT ON (p.id)
                         p.url, p.title, p.domain, p.folder, p.flag, p.page_type,
+                        p.source_browser_uuid,
                         ps.heading_path, ps.heading_level, ps.section_index,
                         ps.content, ps.date,
                         e.embedding <=> CAST(:query_embedding AS vector) AS distance
@@ -278,6 +279,12 @@ class HybridRAGService:
         matching on URL alone would silently collapse distinct sections
         onto the same pid. Order is preserved so rank-based scoring in
         `_map_to_parents` still reflects similarity order.
+
+        `source_browser_uuid` is only ever known from Postgres (`pages`),
+        never from a Redis/BM25-only hit — attached here regardless of
+        whether this row lands on a brand-new parent or one that already
+        existed via BM25, so a page that surfaced through BM25 first still
+        gets its real origin filled in once its pgvector row is processed.
         """
 
         def _key(source: Optional[str], heading_path: Optional[List[str]]) -> tuple:
@@ -306,11 +313,16 @@ class HybridRAGService:
                             "heading_level": row.get("heading_level"),
                             "section_index": row.get("section_index"),
                             "page_type": row.get("page_type"),
+                            "source_browser_uuid": row.get("source_browser_uuid"),
                         },
                     )
                 )
                 pid = len(parents) - 1
                 source_to_pid[key] = pid
+            else:
+                parents[pid].metadata["source_browser_uuid"] = row.get(
+                    "source_browser_uuid"
+                )
             hits_with_pid.append({**row, "parent_id": pid})
         return parents, hits_with_pid
 
