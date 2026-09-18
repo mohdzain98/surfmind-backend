@@ -36,6 +36,25 @@ class InvalidSyncCode(Exception):
     """Raised when a redeemed code is missing, expired, or already used."""
 
 
+class AlreadySolo(Exception):
+    """Raised when `unlink` is called for a browser not linked to anyone else.
+
+    Unlinking a solo browser has no effect on it (same browser, same data)
+    but leaves its old account behind as empty, orphaned row — pure debris,
+    not a meaningful action. Callers should only offer "unlink" once an
+    account is actually linked (`browser_count > 1`).
+    """
+
+
+class AccountStillLinked(Exception):
+    """Raised when `delete_account` is called on an account with 2+ browsers.
+
+    Deleting a linked account would silently orphan every other browser
+    still pointing at it — callers must unlink them first, one at a time,
+    so each browser explicitly keeps its own data.
+    """
+
+
 async def resolve_sync_account_id(browser_uuid: str, db: AsyncSession) -> int:
     """Return this browser's sync account id, auto-creating one on first contact.
 
@@ -278,11 +297,26 @@ async def unlink(browser_uuid: str, db: AsyncSession) -> int:
     back. The new account is freshly created and empty, so unlike pairing's
     `_migrate_browser_pages`, there's no possible url_hash/flag collision to
     resolve here — a plain reassignment is safe.
+
+    Raises `AlreadySolo` if this browser isn't currently linked to any other
+    browser — see that exception's docstring for why this isn't just a
+    no-op to allow through.
     """
     existing = await db.execute(
         select(User.sync_account_id).where(User.browser_uuid == browser_uuid)
     )
     old_account_id = existing.scalar_one_or_none()
+
+    if old_account_id is not None:
+        count_result = await db.execute(
+            select(func.count())
+            .select_from(User)
+            .where(User.sync_account_id == old_account_id)
+        )
+        if count_result.scalar_one() <= 1:
+            raise AlreadySolo(
+                f"Browser {browser_uuid} is not linked to any other browser"
+            )
 
     account = SyncAccount()
     db.add(account)
@@ -341,3 +375,43 @@ async def get_sync_status(browser_uuid: str, db: AsyncSession) -> dict:
         "sync_account_id": sync_account_id,
         "tier": tier,
     }
+
+
+async def delete_account(sync_account_id: int, db: AsyncSession) -> None:
+    """Permanently delete a solo account and all its data.
+
+    Admin-only operation (no end-user equivalent — users get `unlink` and
+    `clear-data`, not full account deletion). Requires the account to
+    already be solo (0 or 1 linked browsers); raises `AccountStillLinked`
+    otherwise rather than silently dropping every other linked browser's
+    access.
+
+    `sync_codes` has no `ondelete` cascade on `sync_account_id` (unlike
+    `pages`/`users`/`search_history`, which are `ON DELETE CASCADE`), so
+    any of this account's codes are deleted explicitly first — otherwise
+    the `SyncAccount` delete below would fail with a FK violation.
+    `llm_usage.sync_account_id` is `ON DELETE SET NULL`, deliberately: past
+    token-usage stats are a historical record, not user data, so they
+    outlive the account.
+    """
+    count_result = await db.execute(
+        select(func.count())
+        .select_from(User)
+        .where(User.sync_account_id == sync_account_id)
+    )
+    browser_count = count_result.scalar_one()
+    if browser_count > 1:
+        raise AccountStillLinked(
+            f"Account {sync_account_id} has {browser_count} linked browsers — "
+            "unlink them first"
+        )
+
+    await db.execute(
+        delete(SyncCode).where(SyncCode.sync_account_id == sync_account_id)
+    )
+    result = await db.execute(
+        delete(SyncAccount).where(SyncAccount.id == sync_account_id)
+    )
+    await db.commit()
+    if result.rowcount == 0:
+        raise ValueError(f"Account {sync_account_id} not found")

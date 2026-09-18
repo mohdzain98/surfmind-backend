@@ -18,6 +18,7 @@ from src.models.core import (
     UnlinkRequest,
 )
 from src.services.sync_service.sync import (
+    AlreadySolo,
     InvalidSyncCode,
     RateLimitExceeded,
     generate_code,
@@ -26,6 +27,7 @@ from src.services.sync_service.sync import (
     unlink,
 )
 from src.utility.logger import AppLogger
+from src.utility.settings import DATA_SCHEMA_VERSION
 
 logger = AppLogger.get_logger(__name__)
 
@@ -65,8 +67,13 @@ async def redeem_code_route(
 @router.post("/unlink", response_model=Dict[str, Any])
 async def unlink_route(payload: UnlinkRequest, db: AsyncSession = Depends(get_db)):
     """Repoint the requesting browser onto a fresh solo sync account."""
-    sync_account_id = await unlink(browser_uuid=payload.browser_uuid, db=db)
-    return {"success": True, "syncAccountId": sync_account_id}
+    try:
+        sync_account_id = await unlink(browser_uuid=payload.browser_uuid, db=db)
+        return {"success": True, "syncAccountId": sync_account_id}
+    except AlreadySolo as exc:
+        raise HTTPException(
+            status_code=400, detail={"success": False, "message": str(exc)}
+        )
 
 
 @router.post("/status", response_model=Dict[str, Any])
@@ -80,5 +87,11 @@ async def sync_status_route(
     upstream. Otherwise unchanged: always 200, a browser that's never made
     contact is a normal "not yet linked" status (`sync_account_id: null`),
     not an error, and this never auto-creates an account (read-only).
+
+    `dataSchemaVersion` lets the extension detect a backend storage change
+    that could strand its already-"synced" local data — see
+    `DATA_SCHEMA_VERSION`'s docstring in `settings.py`.
     """
-    return await get_sync_status(browser_uuid=payload.browser_uuid, db=db)
+    status = await get_sync_status(browser_uuid=payload.browser_uuid, db=db)
+    status["dataSchemaVersion"] = DATA_SCHEMA_VERSION
+    return status

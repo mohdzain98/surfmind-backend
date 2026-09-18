@@ -158,6 +158,15 @@ class AppLogger:
             uvicorn_logger.setLevel(level)
             uvicorn_logger.propagate = True
 
+        # google-genai's SDK unconditionally warns about AFC (automatic
+        # function calling) internals on every call, regardless of whether
+        # tools/function-calling are actually used — they aren't, anywhere
+        # in this codebase (grep for bind_tools/tools= turns up nothing).
+        # Pure upstream noise, not an app issue — raised to ERROR so it
+        # doesn't clutter the console/file/app_logs WARNING+ streams, while
+        # a genuine error from that library would still surface.
+        logging.getLogger("google_genai.models").setLevel(logging.ERROR)
+
         if log_to_file:
             data_dir = Path(__file__).resolve().parents[2]
             logs_dir = data_dir / "data" / "logs"

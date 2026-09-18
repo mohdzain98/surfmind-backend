@@ -53,6 +53,26 @@ redis_client = redis.Redis(
 router = APIRouter(prefix="/v1", tags=["Core"])
 
 
+def _annotate_source_browser(docs: List[dict], requesting_browser_uuid: str) -> None:
+    """Mark each doc with whether it came from a different linked browser
+    than the one making this request.
+
+    Computed here, not left to the frontend, so the client only has to
+    render `metadata.found_on_other_browser` — no `browser_uuid` comparison
+    logic needed client-side. `source_browser_uuid` is absent on BM25-only
+    hits (not yet persisted to Postgres — see `rag.py::_merge_vector_hits`),
+    so those always come back `False` rather than an uncertain/missing tag.
+    """
+    for doc in docs:
+        metadata = doc.get("metadata")
+        if metadata is None:
+            continue
+        source_browser_uuid = metadata.get("source_browser_uuid")
+        metadata["found_on_other_browser"] = bool(source_browser_uuid) and (
+            source_browser_uuid != requesting_browser_uuid
+        )
+
+
 async def _ingest_with_own_session(
     items: List[HistoryItem], sync_account_id: str, flag: str, browser_uuid: str
 ) -> None:
@@ -235,6 +255,7 @@ async def search(
             data=payload, history=history_data, user_id=str(sync_account_id), db=db
         )
         duration_ms = int((time.monotonic() - start) * 1000)
+        _annotate_source_browser(response.docs, payload.user_id)
         if response.success:
             background_tasks.add_task(
                 persist_search,
@@ -315,7 +336,9 @@ async def search_stream(
                 )
             async for event in gen:
                 if event.get("step") == "final":
-                    result_holder["data"] = event.get("data")
+                    data = event.get("data") or {}
+                    _annotate_source_browser(data.get("docs") or [], payload.user_id)
+                    result_holder["data"] = data
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as exc:
             logger.error(exc)

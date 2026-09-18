@@ -8,7 +8,7 @@ gated by `get_current_admin`, which requires a valid `Authorization: Bearer
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -38,7 +38,12 @@ from src.services.admin_service.admin import (
     verify_admin,
 )
 from src.services.privacy_service.privacy import clear_all_data, clear_history
-from src.services.sync_service.sync import unlink
+from src.services.sync_service.sync import (
+    AccountStillLinked,
+    AlreadySolo,
+    delete_account,
+    unlink,
+)
 from src.utility.logger import AppLogger
 
 # How long a captured log row is kept — trimmed lazily on read (this repo
@@ -320,6 +325,201 @@ async def search_metrics_route(
     }
 
 
+@router.get("/accounts")
+async def list_accounts_route(
+    browser_uuid: Optional[str] = Query(default=None),
+    sort_by: Literal["activity_score", "created_at", "browser_count"] = Query(
+        default="created_at"
+    ),
+    sort_order: Literal["asc", "desc"] = Query(default="desc"),
+    limit: int = Query(default=50, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    _admin: dict = Depends(get_current_admin),
+):
+    """Paginated, sortable list of accounts.
+
+    Solves the "I don't have an id to look up" gap: pass `browser_uuid`
+    (substring match) to resolve which account a known browser belongs to,
+    or omit it to just browse everything. Each row includes a lightweight
+    activity summary (page/search/token counts) plus a 0-100
+    `activityScore` — see `_activity_scores` — so the list is scannable
+    without opening every row. Use `GET /accounts/{id}` for the full detail
+    (browser list, etc.) once you have the id.
+
+    `sort_by=activity_score`/`browser_count` aren't real database columns
+    (they're computed from other tables), so sorting by them can't be a
+    plain SQL `ORDER BY` + `LIMIT`/`OFFSET` — that would only sort *within*
+    whatever page the DB happened to return, which is wrong the moment
+    there's more than one page. Instead: fetch every matching account
+    (respecting `browser_uuid`, before pagination), compute each one's
+    sort key, sort the full set in Python, then slice `offset:offset+limit`
+    — correct at any page, and cheap at this tool's scale (this repo has
+    dozens of accounts, not millions).
+    """
+    base_query = select(SyncAccount)
+    if browser_uuid:
+        matching_ids = (
+            select(User.sync_account_id)
+            .where(User.browser_uuid.ilike(f"%{browser_uuid}%"))
+            .distinct()
+        )
+        base_query = base_query.where(SyncAccount.id.in_(matching_ids))
+
+    total = (
+        await db.execute(select(func.count()).select_from(base_query.subquery()))
+    ).scalar_one()
+
+    all_accounts_result = await db.execute(base_query)
+    all_accounts = all_accounts_result.scalars().all()
+    all_account_ids = [account.id for account in all_accounts]
+
+    browser_counts_result = await db.execute(
+        select(User.sync_account_id, func.count())
+        .where(User.sync_account_id.in_(all_account_ids))
+        .group_by(User.sync_account_id)
+    )
+    browser_counts = dict(browser_counts_result.all())
+
+    pages_by_account, searches_by_account, tokens_by_account = await _page_metrics(
+        db, all_account_ids
+    )
+    scores = await _activity_scores(
+        db, all_account_ids, pages_by_account, searches_by_account, tokens_by_account
+    )
+
+    reverse = sort_order == "desc"
+    if sort_by == "activity_score":
+        all_accounts.sort(key=lambda a: scores.get(a.id, 0.0), reverse=reverse)
+    elif sort_by == "browser_count":
+        all_accounts.sort(key=lambda a: browser_counts.get(a.id, 0), reverse=reverse)
+    else:
+        all_accounts.sort(key=lambda a: a.created_at, reverse=reverse)
+
+    page_accounts = all_accounts[offset : offset + limit]
+
+    return {
+        "accounts": [
+            {
+                "syncAccountId": account.id,
+                "tier": account.tier,
+                "browserCount": browser_counts.get(account.id, 0),
+                "isLinked": browser_counts.get(account.id, 0) > 1,
+                "createdAt": account.created_at.isoformat(),
+                "pagesTotal": pages_by_account.get(account.id, 0),
+                "searchCount": searches_by_account.get(account.id, 0),
+                "llmTokensTotal": tokens_by_account.get(account.id, 0),
+                "activityScore": scores[account.id],
+            }
+            for account in page_accounts
+        ],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+async def _page_metrics(
+    db: AsyncSession, account_ids: list[int]
+) -> tuple[dict, dict, dict]:
+    """Per-account totals for the given ids: pages, searches, LLM tokens."""
+    if not account_ids:
+        return {}, {}, {}
+
+    pages_result = await db.execute(
+        select(Page.user_id, func.count())
+        .where(Page.user_id.in_(account_ids))
+        .group_by(Page.user_id)
+    )
+    pages_by_account = dict(pages_result.all())
+
+    searches_result = await db.execute(
+        select(SearchHistory.user_id, func.count())
+        .where(SearchHistory.user_id.in_(account_ids))
+        .group_by(SearchHistory.user_id)
+    )
+    searches_by_account = dict(searches_result.all())
+
+    tokens_result = await db.execute(
+        select(
+            LLMUsage.sync_account_id,
+            func.sum(LLMUsage.input_tokens + LLMUsage.output_tokens),
+        )
+        .where(LLMUsage.sync_account_id.in_(account_ids))
+        .group_by(LLMUsage.sync_account_id)
+    )
+    tokens_by_account = dict(tokens_result.all())
+
+    return pages_by_account, searches_by_account, tokens_by_account
+
+
+async def _activity_scores(
+    db: AsyncSession,
+    account_ids: list[int],
+    pages_by_account: dict,
+    searches_by_account: dict,
+    tokens_by_account: dict,
+) -> dict:
+    """0-100 activity score (float, 2 decimal places) per account id,
+    equally weighting 3 signals: total pages, search count, total LLM
+    tokens. Left unrounded to whole numbers on purpose — two accounts that
+    are close but not equal in activity should show as different scores,
+    not collapse to the same integer.
+
+    Each signal is min-max normalized against the max value for that
+    signal across **all** accounts (not just the current page/filter), so
+    a score of e.g. 80.42 means the same thing regardless of which page or
+    `browser_uuid` filter produced this row — the three normalized signals
+    are then averaged with equal weight (per explicit product decision:
+    no single signal — e.g. LLM cost — dominates the score).
+    """
+    if not account_ids:
+        return {}
+
+    pages_counts = (
+        select(func.count().label("cnt")).select_from(Page).group_by(Page.user_id)
+    ).subquery()
+    max_pages = (
+        await db.execute(select(func.max(pages_counts.c.cnt)))
+    ).scalar_one() or 0
+
+    search_counts = (
+        select(func.count().label("cnt"))
+        .select_from(SearchHistory)
+        .group_by(SearchHistory.user_id)
+    ).subquery()
+    max_searches = (
+        await db.execute(select(func.max(search_counts.c.cnt)))
+    ).scalar_one() or 0
+
+    token_sums = (
+        select(func.sum(LLMUsage.input_tokens + LLMUsage.output_tokens).label("tok"))
+        .select_from(LLMUsage)
+        .group_by(LLMUsage.sync_account_id)
+    ).subquery()
+    max_tokens = (
+        await db.execute(select(func.max(token_sums.c.tok)))
+    ).scalar_one() or 0
+
+    def _normalize(value: int, max_value: int) -> float:
+        if not max_value:
+            return 0.0
+        return min(value / max_value, 1.0) * 100
+
+    return {
+        account_id: round(
+            (
+                _normalize(pages_by_account.get(account_id, 0), max_pages)
+                + _normalize(searches_by_account.get(account_id, 0), max_searches)
+                + _normalize(tokens_by_account.get(account_id, 0), max_tokens)
+            )
+            / 3,
+            2,
+        )
+        for account_id in account_ids
+    }
+
+
 @router.get("/accounts/{sync_account_id}")
 async def account_detail_route(
     sync_account_id: int,
@@ -385,9 +585,15 @@ async def admin_unlink_browser_route(
     Delegates to the same `sync_service.unlink` a browser uses on itself —
     reclaims that browser's own contributed pages per its existing logic.
     `sync_account_id` in the path is informational/for the audit log only;
-    `unlink` resolves the browser's actual current account itself.
+    `unlink` resolves the browser's actual current account itself. 400s if
+    the browser isn't currently linked to anyone (see `AlreadySolo`) — has
+    no effect and just leaves a fresh orphaned account, so this isn't a
+    meaningful action to allow through.
     """
-    new_account_id = await unlink(browser_uuid=payload.browser_uuid, db=db)
+    try:
+        new_account_id = await unlink(browser_uuid=payload.browser_uuid, db=db)
+    except AlreadySolo as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     logger.warning(
         "Admin action: unlink-browser",
         extra={
@@ -442,3 +648,40 @@ async def admin_revoke_sync_code_route(
         extra={"admin": admin.get("username"), "code": code},
     )
     return {"success": True, "code": code}
+
+
+@router.delete("/accounts/{sync_account_id}")
+async def admin_delete_account_route(
+    sync_account_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(get_current_admin),
+):
+    """Permanently delete a solo (0 or 1 browser) account and all its data.
+
+    409s with `AccountStillLinked`'s message if the account still has 2+
+    linked browsers — unlink them first, one at a time, via
+    `unlink-browser` above. Cascades to pages/sections/embeddings/search
+    history; LLM usage stats are preserved (`sync_account_id` set to
+    `NULL`), matching `delete_account`'s own retention reasoning.
+    """
+    browsers_result = await db.execute(
+        select(User.browser_uuid).where(User.sync_account_id == sync_account_id)
+    )
+    browsers = [row[0] for row in browsers_result.all()]
+
+    try:
+        await delete_account(sync_account_id, db)
+    except AccountStillLinked as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    logger.warning(
+        "Admin action: delete account",
+        extra={
+            "admin": admin.get("username"),
+            "sync_account_id": sync_account_id,
+            "browser_uuid": browsers[0] if browsers else None,
+        },
+    )
+    return {"success": True, "deletedSyncAccountId": sync_account_id}

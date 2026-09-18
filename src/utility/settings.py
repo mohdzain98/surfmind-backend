@@ -19,6 +19,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # circular import: path_finder -> logger -> settings.
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
+# Bump this ONLY when a backend change means previously-synced client data
+# could now be silently stale/missing from search — e.g. this value's
+# introduction, marking the move from Redis-only caching to persisted
+# Postgres/pgvector storage (anything synced before that point was never
+# written to Postgres and needs a full resync to become searchable again).
+# The extension compares this against the last version it successfully
+# synced against (exposed via /health and /v1/sync/status) and marks its
+# local data dirty on a mismatch, forcing exactly one full resync — not a
+# literal semantic version, just a monotonically increasing marker.
+DATA_SCHEMA_VERSION = 1
+
 
 @lru_cache(maxsize=2)
 def _load_params(filename: str) -> Dict[str, Any]:
