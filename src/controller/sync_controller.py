@@ -22,6 +22,7 @@ from src.services.sync_service.sync import (
     InvalidSyncCode,
     RateLimitExceeded,
     generate_code,
+    get_page_counts,
     get_sync_status,
     redeem_code,
     unlink,
@@ -95,3 +96,18 @@ async def sync_status_route(
     status = await get_sync_status(browser_uuid=payload.browser_uuid, db=db)
     status["dataSchemaVersion"] = DATA_SCHEMA_VERSION
     return status
+
+
+@router.post("/page-counts", response_model=Dict[str, Any])
+async def page_counts_route(
+    payload: SyncStatusRequest, db: AsyncSession = Depends(get_db)
+):
+    """Return this browser's own persisted page counts, by flag.
+
+    POST, not GET — same MV3 Origin-header reasoning as `/status`. Counts
+    only what THIS browser contributed (via `source_browser_uuid`), so the
+    extension can compare against its own local history/bookmark counts
+    and offer a manual "resync" action specifically when they differ —
+    automatic dirty-flag syncing stays the default path otherwise.
+    """
+    return await get_page_counts(browser_uuid=payload.browser_uuid, db=db)
