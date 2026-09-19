@@ -377,6 +377,32 @@ async def get_sync_status(browser_uuid: str, db: AsyncSession) -> dict:
     }
 
 
+async def get_page_counts(browser_uuid: str, db: AsyncSession) -> dict:
+    """Return this browser's own persisted page counts, by flag.
+
+    Counts via `source_browser_uuid` — what THIS browser specifically got
+    persisted to Postgres — not the shared account's total, so a paired
+    browser comparing against its own local count gets a meaningful
+    number even when other linked browsers have contributed far more.
+    Lets the extension detect drift (captured locally but never
+    successfully synced — see the Redis-only-era staleness issue this was
+    built for) and offer a manual resync only when counts actually differ,
+    rather than exposing one unconditionally. Never errors for an unknown
+    browser — same "not yet linked is a normal state" philosophy as
+    `get_sync_status`.
+    """
+    result = await db.execute(
+        select(Page.flag, func.count())
+        .where(Page.source_browser_uuid == browser_uuid)
+        .group_by(Page.flag)
+    )
+    counts = dict(result.all())
+    return {
+        "history_count": counts.get("history", 0),
+        "bookmark_count": counts.get("bookmark", 0),
+    }
+
+
 async def delete_account(sync_account_id: int, db: AsyncSession) -> None:
     """Permanently delete a solo account and all its data.
 
