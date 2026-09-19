@@ -71,6 +71,13 @@ class Page(Base):
     # revisits the same page. NULL for pre-existing rows from an account
     # that ever had more than one browser (no way to know retroactively).
     source_browser_uuid: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Which linked browser most recently synced this page successfully —
+    # updated on every insert AND update, unlike source_browser_uuid.
+    # Answers "is my data actually synced" (sync_service.get_page_counts),
+    # not "who found this first" — a page another linked browser originally
+    # contributed still counts as synced for a browser that later re-syncs
+    # it, even though source_browser_uuid stays pointed at the original.
+    last_synced_browser_uuid: Mapped[str | None] = mapped_column(String, nullable=True)
 
     sections: Mapped[list["PageSection"]] = relationship(
         back_populates="page", cascade="all, delete-orphan"

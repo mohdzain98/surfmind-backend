@@ -380,20 +380,28 @@ async def get_sync_status(browser_uuid: str, db: AsyncSession) -> dict:
 async def get_page_counts(browser_uuid: str, db: AsyncSession) -> dict:
     """Return this browser's own persisted page counts, by flag.
 
-    Counts via `source_browser_uuid` — what THIS browser specifically got
-    persisted to Postgres — not the shared account's total, so a paired
-    browser comparing against its own local count gets a meaningful
-    number even when other linked browsers have contributed far more.
-    Lets the extension detect drift (captured locally but never
-    successfully synced — see the Redis-only-era staleness issue this was
-    built for) and offer a manual resync only when counts actually differ,
-    rather than exposing one unconditionally. Never errors for an unknown
-    browser — same "not yet linked is a normal state" philosophy as
-    `get_sync_status`.
+    Counts via `last_synced_browser_uuid`, NOT `source_browser_uuid` — the
+    latter is insert-only (set once, never overwritten) so search
+    attribution can show "who found this first"; it deliberately doesn't
+    move even when a different linked browser later re-syncs the same
+    page. That made it the wrong column for this question. A page another
+    linked browser originally contributed, but THIS browser has also
+    successfully re-synced, correctly counts as synced for this browser —
+    `last_synced_browser_uuid` is updated on every upsert (see
+    `ingestion.py::_upsert_pages`), so it always reflects the most recent
+    successful sync, whoever's account it happened under. Not the shared
+    account's total — so a paired browser comparing against its own local
+    count gets a meaningful number even when other linked browsers have
+    contributed far more. Lets the extension detect drift (captured
+    locally but never successfully synced — see the Redis-only-era
+    staleness issue this was built for) and offer a manual resync only
+    when counts actually differ, rather than exposing one unconditionally.
+    Never errors for an unknown browser — same "not yet linked is a normal
+    state" philosophy as `get_sync_status`.
     """
     result = await db.execute(
         select(Page.flag, func.count())
-        .where(Page.source_browser_uuid == browser_uuid)
+        .where(Page.last_synced_browser_uuid == browser_uuid)
         .group_by(Page.flag)
     )
     counts = dict(result.all())
