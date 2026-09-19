@@ -253,7 +253,15 @@ async def _upsert_pages(
     `source_browser_uuid` is set here on the INSERT values only — neither
     `set_` dict below references it, so `ON CONFLICT DO UPDATE` leaves an
     existing page's recorded origin untouched even if a *different* linked
-    browser resyncs the same URL later.
+    browser resyncs the same URL later. That's correct for search
+    attribution ("who found this first"), but wrong for sync-coverage
+    checks ("is my data actually synced") — a page a different linked
+    browser originally contributed, then this browser also successfully
+    re-synced, should count as synced for THIS browser even though it
+    didn't originally create the row. `last_synced_browser_uuid` answers
+    that second question: set on every insert AND update (in both `set_`
+    dicts below), so it always reflects whichever browser most recently
+    confirmed this page still exists — see `sync_service.get_page_counts`.
     """
     is_bookmark = flag == "bookmark"
     page_values = []
@@ -269,6 +277,7 @@ async def _upsert_pages(
             "flag": flag,
             "page_type": _classify_page_type(len(sections), max_level),
             "source_browser_uuid": browser_uuid,
+            "last_synced_browser_uuid": browser_uuid,
         }
         if is_bookmark:
             entry["visited_at"] = _parse_bookmark_visited_at(sections[-1].date)
@@ -290,6 +299,7 @@ async def _upsert_pages(
                 (date_changed, Page.__table__.c.visit_count + 1),
                 else_=Page.__table__.c.visit_count,
             ),
+            "last_synced_browser_uuid": stmt.excluded.last_synced_browser_uuid,
         }
     else:
         set_ = {
@@ -299,6 +309,7 @@ async def _upsert_pages(
             "page_type": stmt.excluded.page_type,
             "visited_at": func.now(),
             "visit_count": Page.__table__.c.visit_count + 1,
+            "last_synced_browser_uuid": stmt.excluded.last_synced_browser_uuid,
         }
     stmt = stmt.on_conflict_do_update(
         constraint="uq_pages_user_urlhash_flag", set_=set_
