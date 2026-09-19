@@ -19,6 +19,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # circular import: path_finder -> logger -> settings.
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
+# Bump this ONLY when a backend change means previously-synced client data
+# could now be silently stale/missing from search — e.g. this value's
+# introduction, marking the move from Redis-only caching to persisted
+# Postgres/pgvector storage (anything synced before that point was never
+# written to Postgres and needs a full resync to become searchable again).
+# The extension compares this against the last version it successfully
+# synced against (exposed via /health and /v1/sync/status) and marks its
+# local data dirty on a mismatch, forcing exactly one full resync — not a
+# literal semantic version, just a monotonically increasing marker.
+DATA_SCHEMA_VERSION = 1
+
 
 @lru_cache(maxsize=2)
 def _load_params(filename: str) -> Dict[str, Any]:
@@ -52,6 +63,7 @@ class Settings(BaseSettings):
     redis_host: str = Field(default="localhost", validation_alias="REDIS_HOST")
     redis_port: int = Field(default=6379, validation_alias="REDIS_PORT")
     database_url: str = Field(default="", validation_alias="DATABASE_URL")
+    admin_jwt_secret: str = Field(default="", validation_alias="ADMIN_JWT_SECRET")
 
     @property
     def _params(self) -> Dict[str, Any]:
@@ -90,6 +102,11 @@ class Settings(BaseSettings):
     def sync_code_rate_limit_per_hour(self) -> int:
         """Max codes generated per account per hour (sync.code_rate_limit_per_hour)."""
         return self._params["sync"]["code_rate_limit_per_hour"]
+
+    @property
+    def admin_token_expiry_minutes(self) -> int:
+        """Admin JWT TTL in minutes (admin.token_expiry_minutes)."""
+        return self._params["admin"]["token_expiry_minutes"]
 
     @property
     def search_history_retention_cap(self) -> int:

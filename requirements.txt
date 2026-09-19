@@ -20,3 +20,6 @@ alembic
 rich
 PyYAML
 locust
+bcrypt
+pyjwt
+psycopg2-binary

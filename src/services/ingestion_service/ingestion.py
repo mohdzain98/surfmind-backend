@@ -230,7 +230,11 @@ async def _build_embedding_inputs(
 
 
 async def _upsert_pages(
-    url_groups: Dict[str, List[HistoryItem]], user_id: str, flag: str, db: AsyncSession
+    url_groups: Dict[str, List[HistoryItem]],
+    user_id: str,
+    flag: str,
+    browser_uuid: str,
+    db: AsyncSession,
 ) -> Dict[str, int]:
     """Upsert one `Page` row per URL in this batch. Returns `{url: page_id}`.
 
@@ -245,6 +249,11 @@ async def _upsert_pages(
     `dateAdded`. An unchanged bookmark re-synced repeatedly leaves both
     untouched, keeping cap eviction meaningfully LRU instead of clustering
     every bookmark at "last synced."
+
+    `source_browser_uuid` is set here on the INSERT values only — neither
+    `set_` dict below references it, so `ON CONFLICT DO UPDATE` leaves an
+    existing page's recorded origin untouched even if a *different* linked
+    browser resyncs the same URL later.
     """
     is_bookmark = flag == "bookmark"
     page_values = []
@@ -259,6 +268,7 @@ async def _upsert_pages(
             "folder": sections[-1].folder,
             "flag": flag,
             "page_type": _classify_page_type(len(sections), max_level),
+            "source_browser_uuid": browser_uuid,
         }
         if is_bookmark:
             entry["visited_at"] = _parse_bookmark_visited_at(sections[-1].date)
@@ -298,7 +308,11 @@ async def _upsert_pages(
 
 
 async def ingest_batch(
-    items: List[HistoryItem], user_id: str, flag: str, db: AsyncSession
+    items: List[HistoryItem],
+    user_id: str,
+    flag: str,
+    browser_uuid: str,
+    db: AsyncSession,
 ) -> None:
     """Upsert a batch's pages and sections, embed what changed, and trim.
 
@@ -307,6 +321,10 @@ async def ingest_batch(
     new/changed sections are re-embedded. Runs cap eviction (by page count)
     in the same transaction, so upsert + trim + the FK-cascaded section/
     embedding cleanup all commit together.
+
+    `browser_uuid` is the raw requesting browser (distinct from `user_id`,
+    the already-resolved shared account id) — recorded per new page as
+    `source_browser_uuid` for cross-browser result attribution.
     """
     if not items:
         return
@@ -317,7 +335,7 @@ async def ingest_batch(
     }
     all_items = [item for sections in url_groups.values() for item in sections]
 
-    page_id_by_url = await _upsert_pages(url_groups, user_id, flag, db)
+    page_id_by_url = await _upsert_pages(url_groups, user_id, flag, browser_uuid, db)
 
     section_keys = [
         (page_id_by_url[item.url], tuple(_default_heading_path(item, flag)))
