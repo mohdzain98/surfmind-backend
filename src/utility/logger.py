@@ -158,6 +158,15 @@ class AppLogger:
             uvicorn_logger.setLevel(level)
             uvicorn_logger.propagate = True
 
+        # google-genai's SDK unconditionally warns about AFC (automatic
+        # function calling) internals on every call, regardless of whether
+        # tools/function-calling are actually used — they aren't, anywhere
+        # in this codebase (grep for bind_tools/tools= turns up nothing).
+        # Pure upstream noise, not an app issue — raised to ERROR so it
+        # doesn't clutter the console/file/app_logs WARNING+ streams, while
+        # a genuine error from that library would still surface.
+        logging.getLogger("google_genai.models").setLevel(logging.ERROR)
+
         if log_to_file:
             data_dir = Path(__file__).resolve().parents[2]
             logs_dir = data_dir / "data" / "logs"
@@ -174,6 +183,15 @@ class AppLogger:
                 SafeExtraFormatter(file_format, datefmt="%Y-%m-%d %H:%M:%S")
             )
             root_logger.addHandler(file_handler)
+
+        # Persists the same WARNING+ records to Postgres (app_logs), so the
+        # admin API can surface them — see db_log_handler for why this is a
+        # separate sync/queued path rather than the app's async engine.
+        from src.utility.db_log_handler import get_queue_handler
+
+        db_queue_handler = get_queue_handler()
+        db_queue_handler.setLevel(logging.WARNING)
+        root_logger.addHandler(db_queue_handler)
 
     @staticmethod
     def get_logger(name: str | None = None) -> "DebugAwareLogger":

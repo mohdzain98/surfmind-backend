@@ -65,6 +65,19 @@ class Page(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # Which linked browser first contributed this page — set on insert
+    # only, never overwritten on a later resync, so attribution reflects
+    # the original contributor even if a different linked browser
+    # revisits the same page. NULL for pre-existing rows from an account
+    # that ever had more than one browser (no way to know retroactively).
+    source_browser_uuid: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Which linked browser most recently synced this page successfully —
+    # updated on every insert AND update, unlike source_browser_uuid.
+    # Answers "is my data actually synced" (sync_service.get_page_counts),
+    # not "who found this first" — a page another linked browser originally
+    # contributed still counts as synced for a browser that later re-syncs
+    # it, even though source_browser_uuid stays pointed at the original.
+    last_synced_browser_uuid: Mapped[str | None] = mapped_column(String, nullable=True)
 
     sections: Mapped[list["PageSection"]] = relationship(
         back_populates="page", cascade="all, delete-orphan"
@@ -216,6 +229,73 @@ class SearchHistory(Base):
     # Mirrors the `docs` list already returned by /search — same shape, no
     # reshaping needed to render the accordion.
     sources: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # Nullable — added after this table already had rows, so existing
+    # searches have no recorded timing. Wall-clock elapsed time for /search
+    # or the full /search-stream SSE stream, set by core_controller.py.
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class AdminUser(Base):
+    """An admin operator account — separate from `SyncAccount`/`User`.
+
+    Created only via `scripts/create_admin.py`, never through a public
+    endpoint. Backs `/v1/admin/login`.
+    """
+
+    __tablename__ = "admin_users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class AppLog(Base):
+    """One WARNING+ log record, written by `src.utility.db_log_handler`.
+
+    Populated automatically from the root logger — every warning/error
+    anywhere in the app lands here, including the LLM/embeddings fallback
+    and total-failure logging already in `rag.py`/`post_processing.py`/
+    `provider.py`. Surfaced read-only via `/v1/admin/status/logs`.
+    """
+
+    __tablename__ = "app_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    level: Mapped[str] = mapped_column(String, nullable=False)
+    logger_name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    extra: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+
+class LLMUsage(Base):
+    """One LLM call's token usage — written by `core_service/main.py`
+    after `safe_invoke_llm_response`/`post_process` return.
+
+    `sync_account_id` has no FK-enforced cascade on delete (`SET NULL`) —
+    usage stats are a historical record, not user data, so they should
+    outlive the account that generated them.
+    """
+
+    __tablename__ = "llm_usage"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    use_case: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String, nullable=False)
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sync_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sync_accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
     )

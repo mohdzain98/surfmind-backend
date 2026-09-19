@@ -27,6 +27,7 @@ from src.services.llm_service.prompt_builder import Prompts
 from src.utility.logger import AppLogger
 from src.utility.provider import EmbeddingsProvider as ef
 from src.utility.settings import settings
+from src.utility.token_usage_callback import TokenUsageCallback
 
 logger = AppLogger.get_logger(__name__)
 
@@ -243,6 +244,7 @@ class HybridRAGService:
                 SELECT * FROM (
                     SELECT DISTINCT ON (p.id)
                         p.url, p.title, p.domain, p.folder, p.flag, p.page_type,
+                        p.source_browser_uuid,
                         ps.heading_path, ps.heading_level, ps.section_index,
                         ps.content, ps.date,
                         e.embedding <=> CAST(:query_embedding AS vector) AS distance
@@ -278,6 +280,12 @@ class HybridRAGService:
         matching on URL alone would silently collapse distinct sections
         onto the same pid. Order is preserved so rank-based scoring in
         `_map_to_parents` still reflects similarity order.
+
+        `source_browser_uuid` is only ever known from Postgres (`pages`),
+        never from a Redis/BM25-only hit — attached here regardless of
+        whether this row lands on a brand-new parent or one that already
+        existed via BM25, so a page that surfaced through BM25 first still
+        gets its real origin filled in once its pgvector row is processed.
         """
 
         def _key(source: Optional[str], heading_path: Optional[List[str]]) -> tuple:
@@ -306,11 +314,16 @@ class HybridRAGService:
                             "heading_level": row.get("heading_level"),
                             "section_index": row.get("section_index"),
                             "page_type": row.get("page_type"),
+                            "source_browser_uuid": row.get("source_browser_uuid"),
                         },
                     )
                 )
                 pid = len(parents) - 1
                 source_to_pid[key] = pid
+            else:
+                parents[pid].metadata["source_browser_uuid"] = row.get(
+                    "source_browser_uuid"
+                )
             hits_with_pid.append({**row, "parent_id": pid})
         return parents, hits_with_pid
 
@@ -496,27 +509,52 @@ class LLMRag:
         return pchain
 
     def _invoke_chain(
-        self, context: str, date: Optional[str], url: str, flag: str, chain: Runnable
+        self,
+        context: str,
+        date: Optional[str],
+        url: str,
+        flag: str,
+        chain: Runnable,
+        callback: TokenUsageCallback,
     ) -> str:
         """Invoke a chain with the correct input mapping.
         Includes date for history/combined and omits it for bookmarks.
         """
+        config = {"callbacks": [callback]}
         if flag in ("history", "combined"):
-            return chain.invoke({"context": context, "date": date, "url": url})
-        return chain.invoke({"context": context, "url": url})
+            return chain.invoke(
+                {"context": context, "date": date, "url": url}, config=config
+            )
+        return chain.invoke({"context": context, "url": url}, config=config)
 
     def safe_invoke_llm_response(
         self, context: str, date: Optional[str], url: str, flag: str = "history"
-    ) -> Tuple[Any, str]:
+    ) -> Tuple[Any, str, Dict[str, int]]:
         """Invoke the LLM response chain with fallback.
-        Returns the response text and model identifier used.
+
+        Returns the response text, the provider identifier used, and a
+        `{"model": ..., "input_tokens": ..., "output_tokens": ...}` dict for
+        `LLMUsage` recording — usage is best-effort (zeroed on extraction
+        failure, see `TokenUsageCallback`), never blocks the actual response.
         """
         try:
+            callback = TokenUsageCallback()
             chain = self._llm_response(llm=self.base_llm, flag=flag)
             result = self._invoke_chain(
-                context=context, date=date, url=url, flag=flag, chain=chain
+                context=context,
+                date=date,
+                url=url,
+                flag=flag,
+                chain=chain,
+                callback=callback,
             )
-            return result, settings.rag_provider
+            usage = {
+                "provider": settings.rag_provider,
+                "model": settings.rag_model,
+                "input_tokens": callback.total_input_tokens,
+                "output_tokens": callback.total_output_tokens,
+            }
+            return result, settings.rag_provider, usage
         except Exception as exc:
             logger.warning(
                 "Primary LLM failed, falling back to %s: %s",
@@ -524,12 +562,24 @@ class LLMRag:
                 exc,
             )
             try:
+                callback = TokenUsageCallback()
                 llm_fallback = self.llm_provider.get_rag_fallback_llm()
                 chain = self._llm_response(llm=llm_fallback, flag=flag)
                 result = self._invoke_chain(
-                    context=context, date=date, url=url, flag=flag, chain=chain
+                    context=context,
+                    date=date,
+                    url=url,
+                    flag=flag,
+                    chain=chain,
+                    callback=callback,
                 )
-                return result, settings.rag_fallback_provider
+                usage = {
+                    "provider": settings.rag_fallback_provider,
+                    "model": settings.rag_fallback_model,
+                    "input_tokens": callback.total_input_tokens,
+                    "output_tokens": callback.total_output_tokens,
+                }
+                return result, settings.rag_fallback_provider, usage
             except Exception as e:
                 logger.error("Both LLM failed")
                 raise RuntimeError("All LLM providers failed") from e

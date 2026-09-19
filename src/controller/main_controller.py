@@ -10,12 +10,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+from src.controller.admin_controller import router as admin_router
 from src.controller.core_controller import redis_client
 from src.controller.core_controller import router as core_router
 from src.controller.sync_controller import router as sync_router
 from src.db.session import async_session_factory
+from src.utility.db_log_handler import start_listener, stop_listener
 from src.utility.logger import AppLogger
-from src.utility.settings import settings
+from src.utility.settings import DATA_SCHEMA_VERSION, settings
 
 AppLogger.init(
     level=logging.DEBUG if settings.debug else logging.INFO,
@@ -48,7 +50,9 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.error(f"Redis connection failed at startup: {exc}")
 
+    start_listener()
     yield
+    stop_listener()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -63,15 +67,26 @@ app.add_middleware(
 
 app.include_router(core_router)
 app.include_router(sync_router)
+app.include_router(admin_router)
 
 
 @app.get("/", tags=["Health"])
-def health_check():
+def root_health_check():
     """Simple root health endpoint confirming setup."""
     return {"status": "ok", "message": "Setup Successfull"}
 
 
 @app.get("/health", tags=["Health"])
 def health_check():
-    """Secondary health endpoint to monitor FastAPI server state."""
-    return {"status": "ok", "message": "Surfmind FastAPI server running!"}
+    """Secondary health endpoint to monitor FastAPI server state.
+
+    `dataSchemaVersion` lets a client detect a backend storage/ingestion
+    change that could strand its already-"synced" local data (see
+    `DATA_SCHEMA_VERSION`'s docstring) — compare against the last version
+    it synced against and force a resync on mismatch.
+    """
+    return {
+        "status": "ok",
+        "message": "Surfmind FastAPI server running!",
+        "dataSchemaVersion": DATA_SCHEMA_VERSION,
+    }
