@@ -16,6 +16,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Dict, List, Tuple
 
+import tiktoken
 from langchain_core.output_parsers import StrOutputParser
 from sqlalchemy import case, delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -31,6 +32,46 @@ from src.utility.provider import EmbeddingsProvider
 from src.utility.settings import settings
 
 logger = AppLogger.get_logger(__name__)
+
+_TOKEN_ENCODING = tiktoken.get_encoding("cl100k_base")
+# OpenAI's embedding endpoint caps a single request at 300,000 tokens —
+# hit live in prod when one large sync's changed sections collectively
+# summed to 7.7M requested tokens, failing the ENTIRE embedding call (and
+# with it every section in that batch, not just the portion over the
+# limit). Kept well under the real cap so batching has room to work with.
+_MAX_TOKENS_PER_EMBED_REQUEST = 250_000
+
+
+def _chunk_by_token_budget(inputs: List[str]) -> List[List[int]]:
+    """Group `inputs`' indices into batches that stay under the token budget.
+
+    A single input whose own token count already exceeds the budget can't
+    be helped by batching — truncated in place (by token count, not
+    characters, so the cut lands on a real token boundary) and logged,
+    rather than letting one outlier crash the whole batch.
+    """
+    batches: List[List[int]] = []
+    current: List[int] = []
+    current_tokens = 0
+    for i, text in enumerate(inputs):
+        tokens = _TOKEN_ENCODING.encode(text)
+        if len(tokens) > _MAX_TOKENS_PER_EMBED_REQUEST:
+            logger.warning(
+                "Embedding input has %d tokens, exceeds per-request budget "
+                "of %d — truncating",
+                len(tokens),
+                _MAX_TOKENS_PER_EMBED_REQUEST,
+            )
+            tokens = tokens[:_MAX_TOKENS_PER_EMBED_REQUEST]
+            inputs[i] = _TOKEN_ENCODING.decode(tokens)
+        if current and current_tokens + len(tokens) > _MAX_TOKENS_PER_EMBED_REQUEST:
+            batches.append(current)
+            current, current_tokens = [], 0
+        current.append(i)
+        current_tokens += len(tokens)
+    if current:
+        batches.append(current)
+    return batches
 
 
 def _cap_for(flag: str) -> int:
@@ -402,7 +443,18 @@ async def ingest_batch(
         tier = await _get_account_tier(user_id, db)
         embed_inputs = await _build_embedding_inputs(changed_items, tier, flag)
         embeddings = EmbeddingsProvider.get_default_embeddings()
-        vectors = await embeddings.aembed_documents(embed_inputs)
+
+        # Chunked, not one call for the whole batch — a large sync's
+        # changed sections can collectively exceed the provider's
+        # per-request token cap (see _MAX_TOKENS_PER_EMBED_REQUEST), which
+        # otherwise fails every embedding in the batch at once.
+        vectors: List[List[float]] = [None] * len(embed_inputs)
+        for batch_indices in _chunk_by_token_budget(embed_inputs):
+            batch_inputs = [embed_inputs[i] for i in batch_indices]
+            batch_vectors = await embeddings.aembed_documents(batch_inputs)
+            for idx, vector in zip(batch_indices, batch_vectors):
+                vectors[idx] = vector
+
         changed_keys = [
             (page_id_by_url[item.url], tuple(_default_heading_path(item, flag)))
             for item in changed_items
