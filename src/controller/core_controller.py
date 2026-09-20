@@ -5,6 +5,7 @@ Core API routes.
 import asyncio
 import json
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
@@ -52,8 +53,28 @@ redis_client = redis.Redis(
 router = APIRouter(prefix="/v1", tags=["Core"])
 
 
+def _annotate_source_browser(docs: List[dict], requesting_browser_uuid: str) -> None:
+    """Mark each doc with whether it came from a different linked browser
+    than the one making this request.
+
+    Computed here, not left to the frontend, so the client only has to
+    render `metadata.found_on_other_browser` — no `browser_uuid` comparison
+    logic needed client-side. `source_browser_uuid` is absent on BM25-only
+    hits (not yet persisted to Postgres — see `rag.py::_merge_vector_hits`),
+    so those always come back `False` rather than an uncertain/missing tag.
+    """
+    for doc in docs:
+        metadata = doc.get("metadata")
+        if metadata is None:
+            continue
+        source_browser_uuid = metadata.get("source_browser_uuid")
+        metadata["found_on_other_browser"] = bool(source_browser_uuid) and (
+            source_browser_uuid != requesting_browser_uuid
+        )
+
+
 async def _ingest_with_own_session(
-    items: List[HistoryItem], sync_account_id: str, flag: str
+    items: List[HistoryItem], sync_account_id: str, flag: str, browser_uuid: str
 ) -> None:
     """Run one flag's `ingest_batch` in its own `AsyncSession`.
 
@@ -66,7 +87,13 @@ async def _ingest_with_own_session(
     """
     try:
         async with async_session_factory() as db:
-            await ingest_batch(items=items, user_id=sync_account_id, flag=flag, db=db)
+            await ingest_batch(
+                items=items,
+                user_id=sync_account_id,
+                flag=flag,
+                browser_uuid=browser_uuid,
+                db=db,
+            )
     except Exception as exc:
         logger.warning("Failed to persist %s embeddings to Postgres: %s", flag, exc)
 
@@ -77,20 +104,30 @@ async def _persist_embeddings(
     """Ingest a save-data payload into Postgres (entries + embeddings).
 
     Keyed by the resolved `sync_account_id`, not the raw browser id, so
-    linked browsers share one history pool, cap, and pgvector index.
-    Combined mode runs history and bookmark ingestion concurrently (each
-    in its own session) instead of sequentially, roughly halving the
-    latency a pre-search flush blocks on.
+    linked browsers share one history pool, cap, and pgvector index. The
+    raw browser id (`payload.user_id`) is still threaded through
+    separately as `source_browser_uuid` on each new page, for cross-
+    browser result attribution. Combined mode runs history and bookmark
+    ingestion concurrently (each in its own session) instead of
+    sequentially, roughly halving the latency a pre-search flush blocks on.
     """
     if payload.flag == "combined":
         await asyncio.gather(
-            _ingest_with_own_session(payload.data, sync_account_id, "history"),
-            _ingest_with_own_session(payload.bookmarks, sync_account_id, "bookmark"),
+            _ingest_with_own_session(
+                payload.data, sync_account_id, "history", payload.user_id
+            ),
+            _ingest_with_own_session(
+                payload.bookmarks, sync_account_id, "bookmark", payload.user_id
+            ),
         )
     else:
         try:
             await ingest_batch(
-                items=payload.data, user_id=sync_account_id, flag=payload.flag, db=db
+                items=payload.data,
+                user_id=sync_account_id,
+                flag=payload.flag,
+                browser_uuid=payload.user_id,
+                db=db,
             )
         except Exception as exc:
             logger.warning("Failed to persist embeddings to Postgres: %s", exc)
@@ -213,9 +250,12 @@ async def search(
     history: dict = json.loads(user_data)
     try:
         history_data = history.get("data", [])
+        start = time.monotonic()
         response = await service.invoke_rag(
             data=payload, history=history_data, user_id=str(sync_account_id), db=db
         )
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _annotate_source_browser(response.docs, payload.user_id)
         if response.success:
             background_tasks.add_task(
                 persist_search,
@@ -224,6 +264,7 @@ async def search(
                 flag=payload.flag,
                 answer=response.result,
                 sources=response.docs,
+                duration_ms=duration_ms,
             )
         return response
     except Exception as exc:
@@ -274,6 +315,8 @@ async def search_stream(
         history_data = json.loads(user_data).get("data", []) if user_data else []
         bookmark_data = []
 
+    stream_start = time.monotonic()
+
     async def event_stream():
         try:
             if payload.flag == "combined":
@@ -293,7 +336,9 @@ async def search_stream(
                 )
             async for event in gen:
                 if event.get("step") == "final":
-                    result_holder["data"] = event.get("data")
+                    data = event.get("data") or {}
+                    _annotate_source_browser(data.get("docs") or [], payload.user_id)
+                    result_holder["data"] = data
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as exc:
             logger.error(exc)
@@ -306,12 +351,14 @@ async def search_stream(
     async def _persist_after_stream() -> None:
         data = result_holder.get("data")
         if data and data.get("success"):
+            duration_ms = int((time.monotonic() - stream_start) * 1000)
             await persist_search(
                 user_id=str(sync_account_id),
                 query=payload.query,
                 flag=payload.flag,
                 answer=data.get("result", ""),
                 sources=data.get("docs", []),
+                duration_ms=duration_ms,
             )
 
     return StreamingResponse(

@@ -3,13 +3,15 @@ Work as LLM as a Judge to remove unrequired outputs from final response
 """
 
 import ast
-from typing import Any, List
+from typing import Any, Dict, List, Tuple
 
 from langchain_core.prompts import PromptTemplate
 
 from src.models.core import Document
 from src.services.llm_service.llm_provider import LLMProvider
 from src.utility.logger import AppLogger
+from src.utility.settings import settings
+from src.utility.token_usage_callback import TokenUsageCallback
 from src.utility.utils import Utility
 
 logger = AppLogger.get_logger(__name__)
@@ -78,9 +80,14 @@ class PostProcessing:
 
         return joined_docs, document_list, index_map
 
-    def post_process(self, ques: str, docs: List[Document]) -> list[dict[str, Any]]:
+    def post_process(
+        self, ques: str, docs: List[Document]
+    ) -> Tuple[list[dict[str, Any]], Dict[str, Any]]:
         """Filter documents by LLM-assessed relevance.
-        Returns a filtered list of relevant documents.
+
+        Returns the filtered document list and a
+        `{"provider", "model", "input_tokens", "output_tokens"}` usage dict
+        for `LLMUsage` recording (best-effort, see `TokenUsageCallback`).
         """
         llm_primary = self.llm_provider.get_post_processing_llm()
         llm_fallback = self.llm_provider.get_post_processing_fallback_llm()
@@ -94,14 +101,30 @@ class PostProcessing:
             input_variables=["query", "content_blocks"], template=relevant_prompt
         )
         try:
+            callback = TokenUsageCallback()
             ans = llm_primary.invoke(
-                relevance_prompt.invoke({"query": ques, "content_blocks": joined_docs})
+                relevance_prompt.invoke({"query": ques, "content_blocks": joined_docs}),
+                config={"callbacks": [callback]},
             )
+            usage = {
+                "provider": settings.post_processing_provider,
+                "model": settings.post_processing_model,
+                "input_tokens": callback.total_input_tokens,
+                "output_tokens": callback.total_output_tokens,
+            }
         except Exception as e:
             logger.warning(f"Primary LLM failed in post-processing, reason: {e}")
+            callback = TokenUsageCallback()
             ans = llm_fallback.invoke(
-                relevance_prompt.invoke({"query": ques, "content_blocks": joined_docs})
+                relevance_prompt.invoke({"query": ques, "content_blocks": joined_docs}),
+                config={"callbacks": [callback]},
             )
+            usage = {
+                "provider": settings.post_processing_fallback_provider,
+                "model": settings.post_processing_fallback_model,
+                "input_tokens": callback.total_input_tokens,
+                "output_tokens": callback.total_output_tokens,
+            }
         try:
             irrelevant_indices = ast.literal_eval(ans.content.strip())
             if not isinstance(irrelevant_indices, list):
@@ -119,4 +142,4 @@ class PostProcessing:
                 for idx, doc in enumerate(whole_doc)
                 if idx not in irrelevant_indices
             ]
-        return filtered_docs
+        return filtered_docs, usage

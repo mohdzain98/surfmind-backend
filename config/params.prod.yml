@@ -6,6 +6,9 @@ sync:
   code_expiry_minutes: 10
   code_rate_limit_per_hour: 5
 
+admin:
+  token_expiry_minutes: 720
+
 search_history:
   retention_cap: 20
 

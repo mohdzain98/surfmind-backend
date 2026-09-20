@@ -6,7 +6,7 @@ its own `AsyncSession` rather than reusing the request-scoped one, which
 may already be torn down by the time the background task runs.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +20,12 @@ logger = AppLogger.get_logger(__name__)
 
 
 async def persist_search(
-    user_id: str, query: str, flag: str, answer: str, sources: List[dict]
+    user_id: str,
+    query: str,
+    flag: str,
+    answer: str,
+    sources: List[dict],
+    duration_ms: Optional[int] = None,
 ) -> None:
     """Store a completed search and trim to the configured retention cap.
 
@@ -36,6 +41,7 @@ async def persist_search(
                     flag=flag,
                     answer=answer,
                     sources=sources,
+                    duration_ms=duration_ms,
                 )
             )
             await db.flush()

@@ -22,3 +22,6 @@ PyYAML
 locust
 typesafe-sdk
 celery
+bcrypt
+pyjwt
+psycopg2-binary

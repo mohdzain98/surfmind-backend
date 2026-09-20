@@ -1,7 +1,7 @@
 """add opt-in categorization: categories table, pages.category_id/confidence
 
-Revision ID: 0007
-Revises: 0006
+Revision ID: 0013
+Revises: 0012
 Create Date: 2026-09-17
 
 """
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "0007"
-down_revision: Union[str, None] = "0006"
+revision: str = "0013"
+down_revision: Union[str, None] = "0012"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

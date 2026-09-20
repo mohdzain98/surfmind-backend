@@ -4,10 +4,11 @@ Includes a mock streamer to test UI progress handling.
 """
 
 import time
-from typing import Any, AsyncGenerator, Dict, Generator, List
+from typing import Any, AsyncGenerator, Dict, Generator, List, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.db.models import LLMUsage
 from src.models.core import Document, SearchRequest, SearchResponse
 from src.services.core_service.rag import HybridRAGService, LLMRag
 from src.services.llm_service.llm_provider import LLMProvider
@@ -108,6 +109,41 @@ class CoreRetrieval:
             )
         logger.print(label, {"count": len(docs), "docs": summaries})
 
+    async def _record_llm_usage(
+        self,
+        db: AsyncSession,
+        user_id: str,
+        entries: List[Tuple[str, Optional[Dict[str, Any]]]],
+    ) -> None:
+        """Best-effort persist of `LLMUsage` rows for this request.
+
+        `entries` is `(use_case, usage_dict_or_None)` — `None` for a corpus
+        that had nothing to post-process (`_safe_post_process` short-circuits
+        without calling the LLM). Never raises into the caller — a failure to
+        record usage must never affect the actual search response.
+        """
+        try:
+            account_id = int(user_id)
+        except (TypeError, ValueError):
+            account_id = None
+        try:
+            for use_case, usage in entries:
+                if not usage:
+                    continue
+                db.add(
+                    LLMUsage(
+                        use_case=use_case,
+                        provider=usage.get("provider", ""),
+                        model=usage.get("model", ""),
+                        input_tokens=usage.get("input_tokens", 0),
+                        output_tokens=usage.get("output_tokens", 0),
+                        sync_account_id=account_id,
+                    )
+                )
+            await db.commit()
+        except Exception as exc:
+            logger.warning("Failed to record LLM usage: %s", exc)
+
     async def invoke_rag(
         self,
         data: SearchRequest,
@@ -146,16 +182,19 @@ class CoreRetrieval:
         source = top_doc.metadata.get("source")
         date = top_doc.metadata.get("date")
 
-        result, model = self.llm_rag.safe_invoke_llm_response(
+        result, model, rag_usage = self.llm_rag.safe_invoke_llm_response(
             context=context, date=date, url=source, flag=flag
         )
         logger.print("final answer", {"model": model, "result": result})
         pchain = self.llm_rag.structure(flag=flag)
         finalOutput = pchain.invoke({"content": result})
-        final_docs = self.post_processing.post_process(
+        final_docs, pp_usage = self.post_processing.post_process(
             ques=ques, docs=retrieved_parents
         )
         self._print_docs("post-processing output", final_docs)
+        await self._record_llm_usage(
+            db, user_id, [("rag", rag_usage), ("post_processing", pp_usage)]
+        )
         if not final_docs:
             logger.warning("No relevant data found after post processing")
             return self._empty_response("No relevant data found")
@@ -205,7 +244,7 @@ class CoreRetrieval:
             return
         self._print_docs("retrieval output", retrieved_parents)
 
-        validated_docs = self.post_processing.post_process(
+        validated_docs, pp_usage = self.post_processing.post_process(
             ques=ques, docs=retrieved_parents
         )
         self._print_docs("post-processing output", validated_docs)
@@ -223,8 +262,11 @@ class CoreRetrieval:
         source = top_doc.get("metadata", {}).get("source", "")
         date = top_doc.get("metadata", {}).get("date", None)
 
-        result, model = self.llm_rag.safe_invoke_llm_response(
+        result, model, rag_usage = self.llm_rag.safe_invoke_llm_response(
             context=context, date=date, url=source, flag=flag
+        )
+        await self._record_llm_usage(
+            db, user_id, [("rag", rag_usage), ("post_processing", pp_usage)]
         )
         logger.print("final answer", {"model": model, "result": result})
         yield self._stream_event(
@@ -324,15 +366,15 @@ class CoreRetrieval:
         # rate limits — each corpus is ≤3 docs so the latency cost is small.
         def _safe_post_process(docs):
             if not docs:
-                return []
+                return [], None
             try:
                 return self.post_processing.post_process(ques=ques, docs=docs)
             except Exception as exc:
                 logger.warning("Post-processing failed for corpus: %s", exc)
-                return []
+                return [], None
 
-        validated_history = _safe_post_process(history_parents)
-        validated_bookmarks = _safe_post_process(bookmark_parents)
+        validated_history, pp_usage_history = _safe_post_process(history_parents)
+        validated_bookmarks, pp_usage_bookmarks = _safe_post_process(bookmark_parents)
 
         # Merge: history first, then bookmarks (Popup.js re-splits by metadata.type)
         validated_docs = validated_history + validated_bookmarks
@@ -351,8 +393,17 @@ class CoreRetrieval:
         source = top_doc.get("metadata", {}).get("source", "")
         date = top_doc.get("metadata", {}).get("date", None)
 
-        result, model = self.llm_rag.safe_invoke_llm_response(
+        result, model, rag_usage = self.llm_rag.safe_invoke_llm_response(
             context=context, date=date, url=source, flag="combined"
+        )
+        await self._record_llm_usage(
+            db,
+            user_id,
+            [
+                ("rag", rag_usage),
+                ("post_processing", pp_usage_history),
+                ("post_processing", pp_usage_bookmarks),
+            ],
         )
         logger.print("final answer", {"model": model, "result": result})
         yield self._stream_event("llm_response", {"text": result, "model": model})

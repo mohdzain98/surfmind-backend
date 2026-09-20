@@ -183,6 +183,32 @@ class UnlinkRequest(BaseModel):
     )
 
 
+class AdminLoginRequest(BaseModel):
+    """Request schema for admin login."""
+
+    username: str
+    password: str
+
+
+class AdminUnlinkBrowserRequest(BaseModel):
+    """Request schema for an admin force-unlinking one browser from an account."""
+
+    browser_uuid: str = Field(
+        validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )
+
+
+class AdminClearDataRequest(BaseModel):
+    """Request schema for an admin clearing an account's data.
+
+    `scope="history"` clears history pages only (matches `clear_history`);
+    `scope="all"` clears history + bookmarks + search history (matches
+    `clear_all_data`).
+    """
+
+    scope: str = "all"
+
+
 class SyncStatusRequest(BaseModel):
     """Request schema for checking a browser's sync/link status.
 
