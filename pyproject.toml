@@ -1,3 +1,7 @@
+[project]
+name = "surfmind-backend"
+version = "1.80.1"
+
 [tool.black]
 line-length = 88
 target-version = ["py311"]

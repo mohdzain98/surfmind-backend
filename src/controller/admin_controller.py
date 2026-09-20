@@ -7,6 +7,9 @@ gated by `get_current_admin`, which requires a valid `Authorization: Bearer
 """
 
 import asyncio
+import shutil
+import subprocess
+from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
@@ -45,6 +48,8 @@ from src.services.sync_service.sync import (
     unlink,
 )
 from src.utility.logger import AppLogger
+from src.utility.pricing import estimate_cost_usd
+from src.utility.settings import settings
 
 # How long a captured log row is kept — trimmed lazily on read (this repo
 # has no scheduler; see sync_service._delete_expired_codes for the same
@@ -119,7 +124,52 @@ async def health_route(
     except Exception as exc:
         redis_status["detail"] = str(exc)
 
-    return {"postgres": postgres, "pgvector": pgvector, "redis": redis_status}
+    services = {
+        name: await asyncio.to_thread(_check_systemd_service, name)
+        for name in settings.systemd_services
+    }
+
+    return {
+        "postgres": postgres,
+        "pgvector": pgvector,
+        "redis": redis_status,
+        "services": services,
+        "disk": _disk_usage(),
+    }
+
+
+def _check_systemd_service(name: str) -> dict:
+    """`systemctl is-active <name>` — sync, always called via `asyncio.to_thread`.
+
+    `{ok: false, detail: ...}` (never raises) when `systemctl` isn't
+    available at all — e.g. local dev, a non-systemd host — same
+    graceful-degradation shape as the nginx-log-file check.
+    """
+    try:
+        result = subprocess.run(
+            ["systemctl", "is-active", name],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        status = result.stdout.strip()
+        return {"ok": status == "active", "status": status}
+    except FileNotFoundError:
+        return {"ok": False, "status": None, "detail": "systemctl not available"}
+    except Exception as exc:
+        return {"ok": False, "status": None, "detail": str(exc)}
+
+
+def _disk_usage() -> dict:
+    """Disk usage for the root filesystem — stdlib, no subprocess needed."""
+    total, used, free = shutil.disk_usage("/")
+    gb = 1024**3
+    return {
+        "totalGb": round(total / gb, 2),
+        "usedGb": round(used / gb, 2),
+        "freeGb": round(free / gb, 2),
+        "usedPercent": round(used / total * 100, 1),
+    }
 
 
 @router.get("/status/stats")
@@ -254,8 +304,18 @@ async def llm_usage_route(
     )
     result = await db.execute(query)
 
-    return {
-        "usage": [
+    usage = []
+    total_cost_usd = 0.0
+    unpriced_rows = 0
+    for row in result.all():
+        cost_usd = estimate_cost_usd(
+            row.provider, row.model, row.input_tokens, row.output_tokens
+        )
+        if cost_usd is None:
+            unpriced_rows += 1
+        else:
+            total_cost_usd += cost_usd
+        usage.append(
             {
                 "useCase": row.use_case,
                 "provider": row.provider,
@@ -263,9 +323,14 @@ async def llm_usage_route(
                 "inputTokens": row.input_tokens,
                 "outputTokens": row.output_tokens,
                 "calls": row.calls,
+                "costUsd": cost_usd,
             }
-            for row in result.all()
-        ]
+        )
+
+    return {
+        "usage": usage,
+        "totalCostUsd": round(total_cost_usd, 4),
+        "unpricedRows": unpriced_rows,
     }
 
 
@@ -685,3 +750,61 @@ async def admin_delete_account_route(
         },
     )
     return {"success": True, "deletedSyncAccountId": sync_account_id}
+
+
+def _tail_log_file(
+    path: str, limit: int, search: Optional[str]
+) -> tuple[list[str], Optional[str]]:
+    """Return up to `limit` most-recent lines from `path`, oldest first.
+
+    `search` (case-insensitive substring) filters as it goes, so the result
+    is "the last `limit` matching lines," not "the last `limit` lines,
+    then filtered" — the latter could come back short or empty whenever
+    matches are sparse near the end of a busy log file. Runs synchronously
+    (blocking file I/O) — always called via `asyncio.to_thread`.
+    """
+    try:
+        matching: deque[str] = deque(maxlen=limit)
+        with open(path, "r", errors="replace") as f:
+            for line in f:
+                if search and search.lower() not in line.lower():
+                    continue
+                matching.append(line.rstrip("\n"))
+        return list(matching), None
+    except FileNotFoundError:
+        return [], f"Log file not found: {path}"
+    except PermissionError:
+        return [], f"Permission denied reading: {path}"
+    except Exception as exc:
+        return [], str(exc)
+
+
+@router.get("/status/nginx-logs")
+async def nginx_logs_route(
+    log_type: Literal["error", "access"] = Query(default="error"),
+    limit: int = Query(default=100, le=1000),
+    search: Optional[str] = Query(default=None),
+    _admin: dict = Depends(get_current_admin),
+):
+    """Tail nginx's error/access log directly off disk.
+
+    Unlike `/status/logs`, this isn't backed by `app_logs` — nginx runs as
+    its own process outside this app, so its log files on disk are the
+    only source (paths from `settings.nginx_error_log_path`/
+    `nginx_access_log_path`, standard Debian/Ubuntu locations by default).
+    `available: false` (not an error response) when the file can't be
+    read — e.g. running locally with no nginx, or a permissions issue —
+    so the caller can distinguish "no logs to show" from a broken request.
+    """
+    path = (
+        settings.nginx_error_log_path
+        if log_type == "error"
+        else settings.nginx_access_log_path
+    )
+    lines, detail = await asyncio.to_thread(_tail_log_file, path, limit, search)
+    return {
+        "logType": log_type,
+        "lines": lines,
+        "available": detail is None,
+        "detail": detail,
+    }

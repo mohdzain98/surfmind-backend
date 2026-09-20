@@ -1,5 +1,7 @@
 # SurfMind Backend
 
+![Version](https://img.shields.io/badge/version-1.80.1-blue)
+
 FastAPI service for SurfMind's retrieval pipeline. It accepts browser history
 and bookmark payloads, caches them in Redis, persists them to Postgres with
 pgvector embeddings, and answers search requests using hybrid retrieval
