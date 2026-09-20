@@ -11,6 +11,7 @@ import shutil
 import subprocess
 from collections import deque
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -138,6 +139,30 @@ async def health_route(
     }
 
 
+def _resolve_systemctl_path() -> str:
+    """Resolve `systemctl`'s absolute path once at import time.
+
+    A plain "systemctl" relies on PATH lookup, which a systemd *service*
+    process's own environment doesn't always carry the same way an
+    interactive SSH shell's does — seen live on staging, where `which
+    systemctl` works over SSH but the running gunicorn worker couldn't
+    find it. Falls back to the two standard Debian/Ubuntu locations so a
+    PATH quirk in the service's environment doesn't just silently disable
+    the check; falls back to the bare name itself as a last resort (still
+    fails the same way it did before, just no worse).
+    """
+    found = shutil.which("systemctl")
+    if found:
+        return found
+    for candidate in ("/usr/bin/systemctl", "/bin/systemctl"):
+        if Path(candidate).exists():
+            return candidate
+    return "systemctl"
+
+
+_SYSTEMCTL_PATH = _resolve_systemctl_path()
+
+
 def _check_systemd_service(name: str) -> dict:
     """`systemctl is-active <name>` — sync, always called via `asyncio.to_thread`.
 
@@ -147,7 +172,7 @@ def _check_systemd_service(name: str) -> dict:
     """
     try:
         result = subprocess.run(
-            ["systemctl", "is-active", name],
+            [_SYSTEMCTL_PATH, "is-active", name],
             capture_output=True,
             text=True,
             timeout=5,
@@ -155,7 +180,11 @@ def _check_systemd_service(name: str) -> dict:
         status = result.stdout.strip()
         return {"ok": status == "active", "status": status}
     except FileNotFoundError:
-        return {"ok": False, "status": None, "detail": "systemctl not available"}
+        return {
+            "ok": False,
+            "status": None,
+            "detail": f"systemctl not found (tried {_SYSTEMCTL_PATH})",
+        }
     except Exception as exc:
         return {"ok": False, "status": None, "detail": str(exc)}
 
