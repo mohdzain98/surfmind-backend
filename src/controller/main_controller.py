@@ -17,7 +17,7 @@ from src.controller.sync_controller import router as sync_router
 from src.db.session import async_session_factory
 from src.utility.db_log_handler import start_listener, stop_listener
 from src.utility.logger import AppLogger
-from src.utility.settings import DATA_SCHEMA_VERSION, settings
+from src.utility.settings import APP_VERSION, DATA_SCHEMA_VERSION, settings
 
 AppLogger.init(
     level=logging.DEBUG if settings.debug else logging.INFO,
@@ -80,13 +80,17 @@ def root_health_check():
 def health_check():
     """Secondary health endpoint to monitor FastAPI server state.
 
-    `dataSchemaVersion` lets a client detect a backend storage/ingestion
-    change that could strand its already-"synced" local data (see
-    `DATA_SCHEMA_VERSION`'s docstring) — compare against the last version
-    it synced against and force a resync on mismatch.
+    `version` is this backend's own release version (`pyproject.toml`) —
+    useful for confirming what's actually live on staging/prod at a
+    glance. `dataSchemaVersion` is a separate, narrower signal: it lets a
+    client detect a backend storage/ingestion change that could strand its
+    already-"synced" local data (see `DATA_SCHEMA_VERSION`'s docstring) —
+    compare against the last version it synced against and force a resync
+    on mismatch. Don't conflate the two.
     """
     return {
         "status": "ok",
         "message": "Surfmind FastAPI server running!",
+        "version": APP_VERSION,
         "dataSchemaVersion": DATA_SCHEMA_VERSION,
     }

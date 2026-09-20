@@ -7,6 +7,7 @@ params from `config/params.dev.yml` or `config/params.prod.yml` (selected by
 files directly; import the module-level `settings` singleton instead.
 """
 
+import tomllib
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Literal
@@ -18,6 +19,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Resolved directly (not via src.utility.path_finder.Finder) to avoid a
 # circular import: path_finder -> logger -> settings.
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
+
+# Read from pyproject.toml (the single source of truth for this) rather
+# than duplicating the number here — bump it in one place, this always
+# matches. Independent of DATA_SCHEMA_VERSION below: this is a general
+# release version, that's a narrow "may your cached data be stale" signal.
+with open(_BACKEND_ROOT / "pyproject.toml", "rb") as _f:
+    APP_VERSION: str = tomllib.load(_f)["project"]["version"]
 
 # Bump this ONLY when a backend change means previously-synced client data
 # could now be silently stale/missing from search — e.g. this value's
@@ -64,6 +72,32 @@ class Settings(BaseSettings):
     redis_port: int = Field(default=6379, validation_alias="REDIS_PORT")
     database_url: str = Field(default="", validation_alias="DATABASE_URL")
     admin_jwt_secret: str = Field(default="", validation_alias="ADMIN_JWT_SECRET")
+    # nginx runs as a separate process outside this app — its own log files
+    # on disk are the only source for them (unlike app_logs, which captures
+    # this app's own logging). Standard Debian/Ubuntu paths by default;
+    # overridable since prod/staging paths could differ.
+    nginx_error_log_path: str = Field(
+        default="/var/log/nginx/error.log", validation_alias="NGINX_ERROR_LOG_PATH"
+    )
+    nginx_access_log_path: str = Field(
+        default="/var/log/nginx/access.log", validation_alias="NGINX_ACCESS_LOG_PATH"
+    )
+    # Comma-separated systemd unit names to health-check (see `systemd_services`
+    # below). "surfmind" is this app's own unit name per the actual prod
+    # journalctl output seen this session — configurable since staging's
+    # differs ("surfmind-staging").
+    systemd_service_names: str = Field(
+        default="nginx,surfmind", validation_alias="SYSTEMD_SERVICE_NAMES"
+    )
+
+    @property
+    def systemd_services(self) -> list[str]:
+        """Parsed `systemd_service_names`, blank entries dropped."""
+        return [
+            name.strip()
+            for name in self.systemd_service_names.split(",")
+            if name.strip()
+        ]
 
     @property
     def _params(self) -> Dict[str, Any]:

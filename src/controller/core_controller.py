@@ -11,7 +11,7 @@ from typing import Any, Dict, List
 
 import redis
 from dotenv import load_dotenv
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.background import BackgroundTask
@@ -134,7 +134,9 @@ async def _persist_embeddings(
 
 
 @router.post("/save-data", response_model=Dict[str, Any])
-async def save_data(payload: DataRequest, db: AsyncSession = Depends(get_db)):
+async def save_data(
+    payload: DataRequest, request: Request, db: AsyncSession = Depends(get_db)
+):
     """Persist user history/bookmark data to Redis with a short TTL.
     For flag='combined', stores history and bookmarks under separate sub-keys.
     Keys are scoped to the requesting browser's resolved sync account, so
@@ -142,6 +144,16 @@ async def save_data(payload: DataRequest, db: AsyncSession = Depends(get_db)):
     Postgres so embeddings are persisted once, at save time, instead of
     being rebuilt on every search request.
     """
+    body_bytes = await request.body()
+    logger.info(
+        "save-data payload: %.2f MB (%d bytes) | flag=%s | history_items=%d | "
+        "bookmark_items=%d",
+        len(body_bytes) / (1024 * 1024),
+        len(body_bytes),
+        payload.flag,
+        len(payload.data),
+        len(payload.bookmarks),
+    )
 
     def _section_summary(item: HistoryItem, flag: str) -> dict:
         heading_path = _default_heading_path(item, flag)

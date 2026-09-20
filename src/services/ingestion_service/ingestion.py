@@ -22,7 +22,7 @@ from sqlalchemy import case, delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models import Page, PageSection, SectionEmbedding, SyncAccount
+from src.db.models import LLMUsage, Page, PageSection, SectionEmbedding, SyncAccount
 from src.models.ai_models import Models
 from src.models.core import HistoryItem
 from src.services.llm_service.llm_provider import LLMProvider
@@ -42,17 +42,21 @@ _TOKEN_ENCODING = tiktoken.get_encoding("cl100k_base")
 _MAX_TOKENS_PER_EMBED_REQUEST = 250_000
 
 
-def _chunk_by_token_budget(inputs: List[str]) -> List[List[int]]:
+def _chunk_by_token_budget(inputs: List[str]) -> Tuple[List[List[int]], int]:
     """Group `inputs`' indices into batches that stay under the token budget.
 
     A single input whose own token count already exceeds the budget can't
     be helped by batching — truncated in place (by token count, not
     characters, so the cut lands on a real token boundary) and logged,
-    rather than letting one outlier crash the whole batch.
+    rather than letting one outlier crash the whole batch. Also returns the
+    total token count across all (possibly-truncated) inputs, so callers
+    recording usage for cost tracking don't need to re-encode everything a
+    second time.
     """
     batches: List[List[int]] = []
     current: List[int] = []
     current_tokens = 0
+    total_tokens = 0
     for i, text in enumerate(inputs):
         tokens = _TOKEN_ENCODING.encode(text)
         if len(tokens) > _MAX_TOKENS_PER_EMBED_REQUEST:
@@ -69,9 +73,10 @@ def _chunk_by_token_budget(inputs: List[str]) -> List[List[int]]:
             current, current_tokens = [], 0
         current.append(i)
         current_tokens += len(tokens)
+        total_tokens += len(tokens)
     if current:
         batches.append(current)
-    return batches
+    return batches, total_tokens
 
 
 def _cap_for(flag: str) -> int:
@@ -449,11 +454,32 @@ async def ingest_batch(
         # per-request token cap (see _MAX_TOKENS_PER_EMBED_REQUEST), which
         # otherwise fails every embedding in the batch at once.
         vectors: List[List[float]] = [None] * len(embed_inputs)
-        for batch_indices in _chunk_by_token_budget(embed_inputs):
+        batches, total_tokens = _chunk_by_token_budget(embed_inputs)
+        for batch_indices in batches:
             batch_inputs = [embed_inputs[i] for i in batch_indices]
             batch_vectors = await embeddings.aembed_documents(batch_inputs)
             for idx, vector in zip(batch_indices, batch_vectors):
                 vectors[idx] = vector
+
+        # Best-effort attribution: FallbackEmbeddings doesn't report back
+        # which provider actually served a call, so this records the
+        # configured primary — inexact only during a rare fallback event
+        # (independently visible via /status/logs?logger_name=provider),
+        # and every cost figure here is an estimate regardless.
+        try:
+            account_id = int(user_id)
+        except (TypeError, ValueError):
+            account_id = None
+        db.add(
+            LLMUsage(
+                use_case="embeddings",
+                provider=settings.embeddings_provider,
+                model=settings.embeddings_model,
+                input_tokens=total_tokens,
+                output_tokens=0,
+                sync_account_id=account_id,
+            )
+        )
 
         changed_keys = [
             (page_id_by_url[item.url], tuple(_default_heading_path(item, flag)))
