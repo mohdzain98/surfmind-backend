@@ -117,14 +117,29 @@ class Settings(BaseSettings):
             node = node[key]
         return node["free"]
 
-    @property
-    def history_cap(self) -> int:
-        """Per-user history retention cap (ingestion.history_cap)."""
-        return self._params["ingestion"]["history_cap"]
+    def history_cap(self, tier: str) -> int:
+        """Per-user history retention cap, tier-split (ingestion.history_cap).
+
+        Free tier's cap (100) intentionally matches the extension's own
+        local retention window — keeping them aligned means the "N local /
+        M synced" sync-coverage comparison actually settles at equality
+        for a healthy free-tier account, instead of the backend
+        perpetually retaining more than the extension ever keeps locally.
+        """
+        return self._free_or_pro("ingestion", "history_cap", tier=tier)
+
+    def _free_or_pro(self, *path: str, tier: str) -> Any:
+        """Read a value nested under `<path>.free` or `<path>.pro`, by tier."""
+        node: Any = self._params
+        for key in path:
+            node = node[key]
+        return node.get(tier, node["free"])
 
     @property
     def bookmark_cap(self) -> int:
-        """Per-user bookmark retention cap (ingestion.bookmark_cap)."""
+        """Per-user bookmark retention cap (ingestion.bookmark_cap) — flat,
+        not tier-split; unlike history, there's no local-cap mismatch to
+        align with for bookmarks."""
         return self._params["ingestion"]["bookmark_cap"]
 
     @property

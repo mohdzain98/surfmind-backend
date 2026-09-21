@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Page, SyncAccount, SyncCode, User
-from src.services.ingestion_service.ingestion import _trim_to_cap
+from src.services.ingestion_service.ingestion import _get_account_tier, _trim_to_cap
 from src.utility.logger import AppLogger
 from src.utility.settings import settings
 
@@ -279,8 +279,13 @@ async def redeem_code(code: str, browser_uuid: str, db: AsyncSession) -> int:
     old_account_id = existing.scalar_one_or_none()
     if old_account_id is not None and old_account_id != sync_account_id:
         await _migrate_browser_pages(old_account_id, sync_account_id, browser_uuid, db)
-        await _trim_to_cap(user_id=str(sync_account_id), flag="history", db=db)
-        await _trim_to_cap(user_id=str(sync_account_id), flag="bookmark", db=db)
+        tier = await _get_account_tier(str(sync_account_id), db)
+        await _trim_to_cap(
+            user_id=str(sync_account_id), flag="history", db=db, tier=tier
+        )
+        await _trim_to_cap(
+            user_id=str(sync_account_id), flag="bookmark", db=db, tier=tier
+        )
 
     await _set_sync_account(browser_uuid, sync_account_id, db)
     await db.commit()

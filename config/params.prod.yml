@@ -1,5 +1,7 @@
 ingestion:
-  history_cap: 500
+  history_cap:
+    free: 100
+    pro: 500
   bookmark_cap: 500
 
 sync:
