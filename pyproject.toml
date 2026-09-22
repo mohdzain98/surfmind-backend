@@ -1,6 +1,6 @@
 [project]
 name = "surfmind-backend"
-version = "1.80.1"
+version = "1.80.2"
 
 [tool.black]
 line-length = 88
