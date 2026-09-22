@@ -2,7 +2,7 @@ ingestion:
   history_cap:
     free: 100
     pro: 500
-  bookmark_cap: 500
+  bookmark_cap: 250
 
 sync:
   code_expiry_minutes: 10
