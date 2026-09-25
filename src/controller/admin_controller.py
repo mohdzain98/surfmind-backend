@@ -667,6 +667,67 @@ async def account_detail_route(
     }
 
 
+@router.get("/accounts/{sync_account_id}/searches")
+async def account_searches_route(
+    sync_account_id: int,
+    limit: int = Query(default=20, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    _admin: dict = Depends(get_current_admin),
+):
+    """One account's recent searches — query, answer, sources, timing.
+
+    Same rows the end-user "recent searches" accordion reads, exposed here
+    for retrieval-quality review (are answers relevant, is retrieval
+    latency reasonable, what are users actually asking). Paginated for
+    consistency with the other admin list routes, but in practice a page
+    beyond `search_history_retention_cap` (`config/params.<env>.yml`,
+    currently 10-20) will always come back empty — trimmed by
+    `search_history_service.persist_search` on every new search, same as
+    the page-count/bookmark caps. Not a bug in this route; the cap is
+    enforced upstream, at write time.
+    """
+    account = await db.get(SyncAccount, sync_account_id)
+    if account is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    total = (
+        await db.execute(
+            select(func.count())
+            .select_from(SearchHistory)
+            .where(SearchHistory.user_id == sync_account_id)
+        )
+    ).scalar_one()
+
+    result = await db.execute(
+        select(SearchHistory)
+        .where(SearchHistory.user_id == sync_account_id)
+        .order_by(SearchHistory.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    searches = [
+        {
+            "id": row.id,
+            "query": row.query,
+            "flag": row.flag,
+            "answer": row.answer,
+            "sources": row.sources,
+            "durationMs": row.duration_ms,
+            "createdAt": row.created_at.isoformat(),
+        }
+        for row in result.scalars()
+    ]
+
+    return {
+        "syncAccountId": sync_account_id,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "searches": searches,
+    }
+
+
 @router.post("/accounts/{sync_account_id}/unlink-browser")
 async def admin_unlink_browser_route(
     sync_account_id: int,
