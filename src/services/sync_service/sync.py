@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Page, SyncAccount, SyncCode, User
-from src.services.ingestion_service.ingestion import _trim_to_cap
+from src.services.ingestion_service.ingestion import _get_account_tier, _trim_to_cap
 from src.utility.logger import AppLogger
 from src.utility.settings import settings
 
@@ -279,8 +279,13 @@ async def redeem_code(code: str, browser_uuid: str, db: AsyncSession) -> int:
     old_account_id = existing.scalar_one_or_none()
     if old_account_id is not None and old_account_id != sync_account_id:
         await _migrate_browser_pages(old_account_id, sync_account_id, browser_uuid, db)
-        await _trim_to_cap(user_id=str(sync_account_id), flag="history", db=db)
-        await _trim_to_cap(user_id=str(sync_account_id), flag="bookmark", db=db)
+        tier = await _get_account_tier(str(sync_account_id), db)
+        await _trim_to_cap(
+            user_id=str(sync_account_id), flag="history", db=db, tier=tier
+        )
+        await _trim_to_cap(
+            user_id=str(sync_account_id), flag="bookmark", db=db, tier=tier
+        )
 
     await _set_sync_account(browser_uuid, sync_account_id, db)
     await db.commit()
@@ -378,36 +383,76 @@ async def get_sync_status(browser_uuid: str, db: AsyncSession) -> dict:
 
 
 async def get_page_counts(browser_uuid: str, db: AsyncSession) -> dict:
-    """Return this browser's own persisted page counts, by flag.
+    """Return this browser's own page counts, plus its account's totals/caps.
 
-    Counts via `last_synced_browser_uuid`, NOT `source_browser_uuid` — the
-    latter is insert-only (set once, never overwritten) so search
-    attribution can show "who found this first"; it deliberately doesn't
-    move even when a different linked browser later re-syncs the same
-    page. That made it the wrong column for this question. A page another
-    linked browser originally contributed, but THIS browser has also
-    successfully re-synced, correctly counts as synced for this browser —
-    `last_synced_browser_uuid` is updated on every upsert (see
-    `ingestion.py::_upsert_pages`), so it always reflects the most recent
-    successful sync, whoever's account it happened under. Not the shared
-    account's total — so a paired browser comparing against its own local
-    count gets a meaningful number even when other linked browsers have
-    contributed far more. Lets the extension detect drift (captured
-    locally but never successfully synced — see the Redis-only-era
-    staleness issue this was built for) and offer a manual resync only
-    when counts actually differ, rather than exposing one unconditionally.
-    Never errors for an unknown browser — same "not yet linked is a normal
-    state" philosophy as `get_sync_status`.
+    `*_count` (this browser only) via `last_synced_browser_uuid`, NOT
+    `source_browser_uuid` — the latter is insert-only (set once, never
+    overwritten) so search attribution can show "who found this first"; it
+    deliberately doesn't move even when a different linked browser later
+    re-syncs the same page. That made it the wrong column for this
+    question. A page another linked browser originally contributed, but
+    THIS browser has also successfully re-synced, correctly counts as
+    synced for this browser — `last_synced_browser_uuid` is updated on
+    every upsert (see `ingestion.py::_upsert_pages`), so it always
+    reflects the most recent successful sync, whoever's account it
+    happened under. Lets the extension detect drift (captured locally but
+    never successfully synced — see the Redis-only-era staleness issue
+    this was built for) and offer a manual resync only when counts
+    actually differ, rather than exposing one unconditionally.
+
+    `*_total` (whole shared account, across every paired browser) plus
+    `*_cap` are included so the extension can tell "you're behind your
+    other devices" apart from "the account is actually at its retention
+    cap" without hardcoding cap values client-side — both read the same
+    way regardless of which browser asks.
+
+    Never errors for an unknown/unlinked browser — same "not yet linked is
+    a normal state" philosophy as `get_sync_status`; totals/cap fall back
+    to the solo, free-tier view in that case.
     """
-    result = await db.execute(
+    own_result = await db.execute(
         select(Page.flag, func.count())
         .where(Page.last_synced_browser_uuid == browser_uuid)
         .group_by(Page.flag)
     )
-    counts = dict(result.all())
+    own_counts = dict(own_result.all())
+    history_count = own_counts.get("history", 0)
+    bookmark_count = own_counts.get("bookmark", 0)
+
+    account_result = await db.execute(
+        select(User.sync_account_id).where(User.browser_uuid == browser_uuid)
+    )
+    sync_account_id = account_result.scalar_one_or_none()
+
+    if sync_account_id is None:
+        return {
+            "history_count": history_count,
+            "bookmark_count": bookmark_count,
+            "history_total": history_count,
+            "bookmark_total": bookmark_count,
+            "history_cap": settings.history_cap("free"),
+            "bookmark_cap": settings.bookmark_cap,
+        }
+
+    tier_result = await db.execute(
+        select(SyncAccount.tier).where(SyncAccount.id == sync_account_id)
+    )
+    tier = tier_result.scalar_one_or_none() or "free"
+
+    total_result = await db.execute(
+        select(Page.flag, func.count())
+        .where(Page.user_id == sync_account_id)
+        .group_by(Page.flag)
+    )
+    total_counts = dict(total_result.all())
+
     return {
-        "history_count": counts.get("history", 0),
-        "bookmark_count": counts.get("bookmark", 0),
+        "history_count": history_count,
+        "bookmark_count": bookmark_count,
+        "history_total": total_counts.get("history", 0),
+        "bookmark_total": total_counts.get("bookmark", 0),
+        "history_cap": settings.history_cap(tier),
+        "bookmark_cap": settings.bookmark_cap,
     }
 
 

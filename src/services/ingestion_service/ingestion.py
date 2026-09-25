@@ -79,9 +79,12 @@ def _chunk_by_token_budget(inputs: List[str]) -> Tuple[List[List[int]], int]:
     return batches, total_tokens
 
 
-def _cap_for(flag: str) -> int:
-    """Return the dev/prod-tiered page retention cap for a flag (config/params.yml)."""
-    return settings.bookmark_cap if flag == "bookmark" else settings.history_cap
+def _cap_for(flag: str, tier: str) -> int:
+    """Return the dev/prod-tiered page retention cap for a flag+tier
+    (config/params.yml). Only history is tier-split; bookmark_cap is flat."""
+    if flag == "bookmark":
+        return settings.bookmark_cap
+    return settings.history_cap(tier)
 
 
 def _default_heading_path(item: HistoryItem, flag: str) -> List[str]:
@@ -444,8 +447,9 @@ async def ingest_batch(
         (row.page_id, tuple(row.heading_path or [])): row.id for row in result
     }
 
+    tier = await _get_account_tier(user_id, db)
+
     if changed_items:
-        tier = await _get_account_tier(user_id, db)
         embed_inputs = await _build_embedding_inputs(changed_items, tier, flag)
         embeddings = EmbeddingsProvider.get_default_embeddings()
 
@@ -496,7 +500,7 @@ async def ingest_batch(
             for section_id, vector in zip(changed_section_ids, vectors)
         )
 
-    await _trim_to_cap(user_id=user_id, flag=flag, db=db)
+    await _trim_to_cap(user_id=user_id, flag=flag, db=db, tier=tier)
     await db.commit()
 
     logger.info(
@@ -508,14 +512,16 @@ async def ingest_batch(
     )
 
 
-async def _trim_to_cap(user_id: str, flag: str, db: AsyncSession) -> None:
+async def _trim_to_cap(user_id: str, flag: str, db: AsyncSession, tier: str) -> None:
     """Evict this user's oldest-by-`visited_at` pages for `flag` beyond the cap.
 
     Deleting `Page` rows cascades to their `PageSection`/`SectionEmbedding`
     rows via `ondelete="CASCADE"`, so the vector index stays in sync for
     free. A 24-section page and a 1-section page each consume one cap slot.
+    `tier` is required (not defaulted to "free") so a caller can't silently
+    under-cap a pro account by forgetting to look it up.
     """
-    cap = _cap_for(flag)
+    cap = _cap_for(flag, tier)
     overflow = (
         select(Page.id)
         .where(Page.user_id == int(user_id), Page.flag == flag)

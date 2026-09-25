@@ -102,12 +102,16 @@ async def sync_status_route(
 async def page_counts_route(
     payload: SyncStatusRequest, db: AsyncSession = Depends(get_db)
 ):
-    """Return this browser's own persisted page counts, by flag.
+    """Return this browser's page counts, plus its account's totals/caps.
 
-    POST, not GET — same MV3 Origin-header reasoning as `/status`. Counts
-    only what THIS browser contributed (via `source_browser_uuid`), so the
-    extension can compare against its own local history/bookmark counts
-    and offer a manual "resync" action specifically when they differ —
-    automatic dirty-flag syncing stays the default path otherwise.
+    POST, not GET — same MV3 Origin-header reasoning as `/status`.
+    `*_count` is scoped to what THIS browser last successfully synced, so
+    the extension can compare against its own local history/bookmark
+    counts and offer a manual "resync" action specifically when they
+    differ — automatic dirty-flag syncing stays the default path
+    otherwise. `*_total`/`*_cap` describe the shared account (every paired
+    browser combined) so the extension can tell "behind my other devices"
+    apart from "account is at its retention cap" without hardcoding cap
+    values client-side.
     """
     return await get_page_counts(browser_uuid=payload.browser_uuid, db=db)
