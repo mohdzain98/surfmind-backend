@@ -131,6 +131,11 @@ class SearchRequest(BaseModel):
     user_id: str = Field(validation_alias=AliasChoices("browser_uuid", "userId"))
     query: str
     flag: str
+    # Bookmark-only. A full folder path exactly as stored on `Page.folder`
+    # (e.g. "Bookmarks bar / Work"), matched as that folder AND everything
+    # nested under it — not a leaf-only exact match. Ignored for
+    # flag="history"; for flag="combined" it scopes only the bookmark leg.
+    folder: str | None = None
 
 
 class SearchResponse(BaseModel):
