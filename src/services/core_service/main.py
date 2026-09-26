@@ -84,16 +84,6 @@ class CoreRetrieval:
                 )
             )
 
-        if folder and flag == "bookmark":
-            # TEMP: folder-search debugging, remove once verified on frontend.
-            logger.print(
-                "folder filter applied",
-                {
-                    "folder": folder,
-                    "items_in": len(history),
-                    "items_matched": len(docs),
-                },
-            )
         return docs
 
     def _empty_response(self, message: str) -> SearchResponse:
