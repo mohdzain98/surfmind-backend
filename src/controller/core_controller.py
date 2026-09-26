@@ -257,6 +257,17 @@ async def search(
     successful search into recent-searches as a background task.
     """
     sync_account_id = await resolve_sync_account_id(browser_uuid=payload.user_id, db=db)
+    # TEMP: folder-search debugging, remove once verified on frontend.
+    logger.print(
+        "search request",
+        {
+            "browser_uuid": payload.user_id,
+            "sync_account_id": sync_account_id,
+            "query": payload.query,
+            "flag": payload.flag,
+            "folder": payload.folder,
+        },
+    )
     redis_key = f"user:{sync_account_id}:{payload.flag}"
     user_data = await asyncio.to_thread(redis_client.get, redis_key)
     history: dict = json.loads(user_data)
@@ -267,6 +278,15 @@ async def search(
             data=payload, history=history_data, user_id=str(sync_account_id), db=db
         )
         duration_ms = int((time.monotonic() - start) * 1000)
+        # TEMP: folder-search debugging, remove once verified on frontend.
+        logger.print(
+            "search response",
+            {
+                "success": response.success,
+                "doc_count": len(response.docs),
+                "duration_ms": duration_ms,
+            },
+        )
         _annotate_source_browser(response.docs, payload.user_id)
         if response.success:
             background_tasks.add_task(
@@ -307,6 +327,17 @@ async def search_stream(
     a successful search into recent-searches after the stream completes.
     """
     sync_account_id = await resolve_sync_account_id(browser_uuid=payload.user_id, db=db)
+    # TEMP: folder-search debugging, remove once verified on frontend.
+    logger.print(
+        "search-stream request",
+        {
+            "browser_uuid": payload.user_id,
+            "sync_account_id": sync_account_id,
+            "query": payload.query,
+            "flag": payload.flag,
+            "folder": payload.folder,
+        },
+    )
     result_holder: dict = {}
 
     if payload.flag == "combined":
@@ -351,6 +382,15 @@ async def search_stream(
                     data = event.get("data") or {}
                     _annotate_source_browser(data.get("docs") or [], payload.user_id)
                     result_holder["data"] = data
+                    # TEMP: folder-search debugging, remove once verified on
+                    # frontend.
+                    logger.print(
+                        "search-stream response",
+                        {
+                            "success": data.get("success"),
+                            "doc_count": len(data.get("docs") or []),
+                        },
+                    )
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as exc:
             logger.error(exc)
