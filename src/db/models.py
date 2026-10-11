@@ -182,6 +182,21 @@ class User(Base):
     sync_account_id: Mapped[int] = mapped_column(
         ForeignKey("sync_accounts.id", ondelete="CASCADE"), nullable=False
     )
+    # User-facing name ("Work Laptop") shown on the linked-browsers list and
+    # on cross-browser result attribution. Null until the user names it (or
+    # the client sends a computed default) — see
+    # `sync_service._normalize_device_name`.
+    device_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Set when this browser joins a sync account: code redemption, or
+    # account creation for the browser that generated the code.
+    linked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Updated at the end of every successful ingest (`ingestion.ingest_batch`)
+    # — drives the "last synced" timestamp on the linked-browsers list.
+    last_synced_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -18,11 +18,18 @@ from typing import Dict, List, Tuple
 
 import tiktoken
 from langchain_core.output_parsers import StrOutputParser
-from sqlalchemy import case, delete, func, select
+from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models import LLMUsage, Page, PageSection, SectionEmbedding, SyncAccount
+from src.db.models import (
+    LLMUsage,
+    Page,
+    PageSection,
+    SectionEmbedding,
+    SyncAccount,
+    User,
+)
 from src.models.ai_models import Models
 from src.models.core import HistoryItem
 from src.services.llm_service.llm_provider import LLMProvider
@@ -501,6 +508,14 @@ async def ingest_batch(
         )
 
     await _trim_to_cap(user_id=user_id, flag=flag, db=db, tier=tier)
+    # Drives the "last synced" timestamp on the linked-browsers list — only
+    # reached on a fully successful ingest, same as `_trim_to_cap` above, so
+    # a failed sync never advances it.
+    await db.execute(
+        update(User)
+        .where(User.browser_uuid == browser_uuid)
+        .values(last_synced_at=func.now())
+    )
     await db.commit()
 
     logger.info(

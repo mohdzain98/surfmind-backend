@@ -169,6 +169,11 @@ class GenerateCodeRequest(BaseModel):
     browser_uuid: str = Field(
         validation_alias=AliasChoices("browser_uuid", "browserUuid")
     )
+    # Optional — names the generating browser (the first device in what may
+    # become a linked account). Omitted keeps whatever name it already has.
+    device_name: str | None = Field(
+        default=None, validation_alias=AliasChoices("device_name", "deviceName")
+    )
 
 
 class RedeemCodeRequest(BaseModel):
@@ -178,6 +183,10 @@ class RedeemCodeRequest(BaseModel):
         validation_alias=AliasChoices("browser_uuid", "browserUuid")
     )
     code: str
+    # Optional — names this browser as it joins the account.
+    device_name: str | None = Field(
+        default=None, validation_alias=AliasChoices("device_name", "deviceName")
+    )
 
 
 class UnlinkRequest(BaseModel):
@@ -185,6 +194,42 @@ class UnlinkRequest(BaseModel):
 
     browser_uuid: str = Field(
         validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )
+
+
+class DevicesRequest(BaseModel):
+    """Request schema for listing the requesting browser's linked devices."""
+
+    browser_uuid: str = Field(
+        validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )
+
+
+class RenameDeviceRequest(BaseModel):
+    """Request schema for renaming a browser in the requester's sync account.
+
+    `target_browser_uuid` may be any browser in that account, not only the
+    requester's own — the user may be fixing the name of a device they
+    aren't currently sitting at.
+    """
+
+    browser_uuid: str = Field(
+        validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )
+    target_browser_uuid: str = Field(
+        validation_alias=AliasChoices("target_browser_uuid", "targetBrowserUuid")
+    )
+    device_name: str = Field(validation_alias=AliasChoices("device_name", "deviceName"))
+
+
+class UnlinkDeviceRequest(BaseModel):
+    """Request schema for remotely unlinking another browser in the account."""
+
+    browser_uuid: str = Field(
+        validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )
+    target_browser_uuid: str = Field(
+        validation_alias=AliasChoices("target_browser_uuid", "targetBrowserUuid")
     )
 
 
