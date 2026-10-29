@@ -32,15 +32,33 @@ class CoreRetrieval:
         self.rag = HybridRAGService()
         self.llm_rag = LLMRag()
 
+    def _matches_folder(self, item_folder: str, folder: str) -> bool:
+        """True if `item_folder` is `folder` itself or nested under it.
+
+        Folder paths are stored/sent as `"Bookmarks bar / Work / Reading"`
+        — a prefix check on `folder + " / "` (not a plain `startswith`)
+        stops `"Bookmarks bar 2"` from matching a filter of
+        `"Bookmarks bar"`.
+        """
+        return item_folder == folder or item_folder.startswith(folder + " / ")
+
     def _build_parent_documents(
-        self, history: List[dict[str, str]], flag: str
+        self,
+        history: List[dict[str, str]],
+        flag: str,
+        folder: Optional[str] = None,
     ) -> List[Document]:
         """Convert raw history items into parent Document objects.
         Maps fields to metadata used by retrieval and post-processing.
+        `folder` (bookmark-only) restricts this to that folder and
+        everything nested under it — ignored for flag="history".
         Returns a list of parent-level documents for chunking.
         """
         docs: List[Document] = []
         for item in history:
+            if folder and flag == "bookmark":
+                if not self._matches_folder(item.get("folder", "") or "", folder):
+                    continue
             title = item.get("title", "")
             # Mirrors ingestion_service._default_heading_path exactly — must
             # match what's persisted in Postgres so pgvector hits for the
@@ -159,7 +177,10 @@ class CoreRetrieval:
         """
         ques = data.query
         flag = data.flag
-        parent_docs = self._build_parent_documents(history=history, flag=flag)
+        folder = data.folder if flag == "bookmark" else None
+        parent_docs = self._build_parent_documents(
+            history=history, flag=flag, folder=folder
+        )
         if not parent_docs:
             logger.warning("No history data found")
             return self._empty_response("No history data found")
@@ -171,6 +192,7 @@ class CoreRetrieval:
             user_id=user_id,
             flag=flag,
             db=db,
+            folder=folder,
         )
         if not retrieved_parents:
             logger.warning("No relevant data found")
@@ -221,7 +243,10 @@ class CoreRetrieval:
         """
         ques = data.query
         flag = data.flag
-        parent_docs = self._build_parent_documents(history=history, flag=flag)
+        folder = data.folder if flag == "bookmark" else None
+        parent_docs = self._build_parent_documents(
+            history=history, flag=flag, folder=folder
+        )
         if not parent_docs:
             res = self._empty_response("No history data found")
             yield self._stream_event("final", res.dict())
@@ -233,6 +258,7 @@ class CoreRetrieval:
             user_id=user_id,
             flag=flag,
             db=db,
+            folder=folder,
         )
         yield self._stream_event(
             "retrieved_parents",
@@ -321,19 +347,28 @@ class CoreRetrieval:
         """
         ques = data.query
         history_docs = self._build_parent_documents(history=history, flag="history")
-        bookmark_docs = self._build_parent_documents(history=bookmarks, flag="bookmark")
+        bookmark_docs = self._build_parent_documents(
+            history=bookmarks, flag="bookmark", folder=data.folder
+        )
 
         if not history_docs and not bookmark_docs:
             res = self._empty_response("No data found for combined search")
             yield self._stream_event("final", res.dict())
             return
 
-        async def _safe_retrieve(docs: List[Document], flag: str) -> List[Document]:
+        async def _safe_retrieve(
+            docs: List[Document], flag: str, folder: Optional[str] = None
+        ) -> List[Document]:
             if not docs:
                 return []
             try:
                 return await self.rag.retrieve_parents(
-                    query=ques, parent_docs=docs, user_id=user_id, flag=flag, db=db
+                    query=ques,
+                    parent_docs=docs,
+                    user_id=user_id,
+                    flag=flag,
+                    db=db,
+                    folder=folder,
                 )
             except Exception as exc:
                 logger.warning("Retrieval failed for corpus: %s", exc)
@@ -346,7 +381,9 @@ class CoreRetrieval:
         # coverage comes from making both calls, not from either call being
         # unscoped.
         history_parents = await _safe_retrieve(history_docs, flag="history")
-        bookmark_parents = await _safe_retrieve(bookmark_docs, flag="bookmark")
+        bookmark_parents = await _safe_retrieve(
+            bookmark_docs, flag="bookmark", folder=data.folder
+        )
 
         total_retrieved = len(history_parents) + len(bookmark_parents)
         yield self._stream_event("retrieved_parents", {"count": total_retrieved})

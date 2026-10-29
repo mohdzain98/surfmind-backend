@@ -6,10 +6,11 @@ repoints a browser's account; everything downstream (Redis keys, ingestion,
 retrieval) is keyed off the resolved account id, not the raw browser id.
 """
 
+import re
 import secrets
 import string
 from datetime import datetime, timedelta, timezone
-from typing import Tuple
+from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -26,6 +27,9 @@ logger = AppLogger.get_logger(__name__)
 CODE_LENGTH = 8
 RATE_LIMIT_WINDOW = timedelta(hours=1)
 _CODE_ALPHABET = string.ascii_uppercase + string.digits
+
+MAX_DEVICE_NAME_LENGTH = 40
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
 class RateLimitExceeded(Exception):
@@ -53,6 +57,64 @@ class AccountStillLinked(Exception):
     still pointing at it — callers must unlink them first, one at a time,
     so each browser explicitly keeps its own data.
     """
+
+
+class DeviceNotInAccount(Exception):
+    """Raised when a device-management call targets a browser outside the
+    requester's own sync account (rename, remote unlink, or the target
+    simply doesn't exist). Deliberately one exception for both "not found"
+    and "wrong account" — either way the requester has no business acting
+    on that browser, and distinguishing the two in the response would leak
+    whether a given browser_uuid exists at all.
+    """
+
+
+def _normalize_device_name(name: Optional[str]) -> Optional[str]:
+    """Trim, collapse internal whitespace, strip control characters.
+
+    Returns `None` for `None`/empty/whitespace-only input — callers treat
+    that as "clear to the default" (rename) or "don't set yet" (link time).
+    Silently truncates past `MAX_DEVICE_NAME_LENGTH` rather than rejecting
+    — a cosmetic display name doesn't warrant a hard validation failure.
+    HTML-looking input (e.g. `<b>x</b>`) is stored as plain text unchanged;
+    safety comes from the frontend never rendering it as HTML, not from
+    stripping it here.
+    """
+    if not name:
+        return None
+    stripped = _CONTROL_CHARS_RE.sub("", name)
+    collapsed = " ".join(stripped.split())
+    if not collapsed:
+        return None
+    return collapsed[:MAX_DEVICE_NAME_LENGTH]
+
+
+async def _apply_device_metadata(
+    browser_uuid: str,
+    device_name: Optional[str],
+    db: AsyncSession,
+    *,
+    set_linked_at: bool,
+) -> None:
+    """Best-effort update of a `users` row's naming/linking metadata.
+
+    Only sets `device_name` when a non-empty value is actually provided —
+    an omitted name at link time leaves the column untouched rather than
+    clearing it. `linked_at` only ever advances forward when requested
+    (COALESCE keeps the original value on a second generate-code call from
+    an already-linked browser).
+    """
+    normalized = _normalize_device_name(device_name)
+    values: dict = {}
+    if normalized is not None:
+        values["device_name"] = normalized
+    if set_linked_at:
+        values["linked_at"] = func.coalesce(User.linked_at, func.now())
+    if not values:
+        return
+    await db.execute(
+        update(User).where(User.browser_uuid == browser_uuid).values(**values)
+    )
 
 
 async def resolve_sync_account_id(browser_uuid: str, db: AsyncSession) -> int:
@@ -118,15 +180,22 @@ def _generate_code() -> str:
     return "".join(secrets.choice(_CODE_ALPHABET) for _ in range(CODE_LENGTH))
 
 
-async def generate_code(browser_uuid: str, db: AsyncSession) -> Tuple[str, datetime]:
+async def generate_code(
+    browser_uuid: str, db: AsyncSession, device_name: Optional[str] = None
+) -> Tuple[str, datetime]:
     """Issue a short-lived pairing code for this browser's sync account.
 
     Raises `RateLimitExceeded` past the dev/prod-tiered hourly limit
     (`sync.code_rate_limit_per_hour` in `config/params.yml`). Returns the
     code and its expiry — that's all the endpoint needs for its response.
+
+    `device_name` (optional) names the generating browser — the first
+    device in what may become a linked account — and marks `linked_at` for
+    it now rather than waiting for someone to actually redeem a code.
     """
     sync_account_id = await resolve_sync_account_id(browser_uuid, db)
     await _delete_expired_codes(sync_account_id, db)
+    await _apply_device_metadata(browser_uuid, device_name, db, set_linked_at=True)
     await db.commit()  # persist cleanup regardless of the rate-limit outcome
 
     expires_at = datetime.now(timezone.utc) + timedelta(
@@ -235,7 +304,9 @@ async def _migrate_browser_pages(
                     await db.execute(delete(Page).where(Page.id == page.id))
 
 
-async def redeem_code(code: str, browser_uuid: str, db: AsyncSession) -> int:
+async def redeem_code(
+    code: str, browser_uuid: str, db: AsyncSession, device_name: Optional[str] = None
+) -> int:
     """Repoint this browser onto the code's sync account.
 
     Raises `InvalidSyncCode` if the code doesn't exist, has expired, or was
@@ -245,6 +316,10 @@ async def redeem_code(code: str, browser_uuid: str, db: AsyncSession) -> int:
     before either commits, so both pass the check and both redeem the same
     code. Postgres's row lock on the UPDATE means only one concurrent
     caller can ever win the `used = false → true` transition.
+
+    `device_name` (optional) names this browser as it joins — applied
+    after `_set_sync_account` so the row is guaranteed to exist even for a
+    browser redeeming a code as its very first contact with the backend.
     """
     now = datetime.now(timezone.utc)
     result = await db.execute(
@@ -288,6 +363,7 @@ async def redeem_code(code: str, browser_uuid: str, db: AsyncSession) -> int:
         )
 
     await _set_sync_account(browser_uuid, sync_account_id, db)
+    await _apply_device_metadata(browser_uuid, device_name, db, set_linked_at=True)
     await db.commit()
     return sync_account_id
 
@@ -340,6 +416,141 @@ async def unlink(browser_uuid: str, db: AsyncSession) -> int:
     await _set_sync_account(browser_uuid, account.id, db)
     await db.commit()
     return account.id
+
+
+def _serialize_device(user: User, requesting_browser_uuid: str) -> dict:
+    """Shared row shape for `list_devices`/`rename_device` responses."""
+    return {
+        "browser_uuid": user.browser_uuid,
+        "device_name": user.device_name,
+        "linked_at": user.linked_at.isoformat() if user.linked_at else None,
+        "last_synced_at": (
+            user.last_synced_at.isoformat() if user.last_synced_at else None
+        ),
+        "is_current": user.browser_uuid == requesting_browser_uuid,
+    }
+
+
+async def list_devices(browser_uuid: str, db: AsyncSession) -> dict:
+    """Return every browser in this browser's sync account.
+
+    Read-only, like `get_sync_status` — a browser with no account (never
+    linked) gets an empty list, not an error.
+    """
+    account_result = await db.execute(
+        select(User.sync_account_id).where(User.browser_uuid == browser_uuid)
+    )
+    sync_account_id = account_result.scalar_one_or_none()
+    if sync_account_id is None:
+        return {"devices": []}
+
+    rows = await db.execute(select(User).where(User.sync_account_id == sync_account_id))
+    devices = [_serialize_device(row, browser_uuid) for row in rows.scalars()]
+    return {"devices": devices}
+
+
+async def rename_device(
+    requester_browser_uuid: str,
+    target_browser_uuid: str,
+    device_name: str,
+    db: AsyncSession,
+) -> dict:
+    """Rename any browser in the requester's own sync account.
+
+    Not limited to the requester's own browser — the user may be fixing
+    the name of a device they aren't currently sitting at. Raises
+    `DeviceNotInAccount` if `target_browser_uuid` doesn't exist or belongs
+    to a different account. An empty/whitespace `device_name` clears the
+    override back to null (frontend falls back to its own computed
+    default), per `_normalize_device_name`.
+    """
+    requester_result = await db.execute(
+        select(User.sync_account_id).where(User.browser_uuid == requester_browser_uuid)
+    )
+    requester_account_id = requester_result.scalar_one_or_none()
+
+    target_result = await db.execute(
+        select(User).where(User.browser_uuid == target_browser_uuid)
+    )
+    target_user = target_result.scalar_one_or_none()
+
+    if (
+        requester_account_id is None
+        or target_user is None
+        or target_user.sync_account_id != requester_account_id
+    ):
+        raise DeviceNotInAccount(
+            f"Browser {target_browser_uuid} is not in {requester_browser_uuid}'s "
+            "sync account"
+        )
+
+    normalized = _normalize_device_name(device_name)
+    await db.execute(
+        update(User)
+        .where(User.browser_uuid == target_browser_uuid)
+        .values(device_name=normalized)
+    )
+    await db.commit()
+    target_user.device_name = normalized
+    return _serialize_device(target_user, requester_browser_uuid)
+
+
+async def unlink_device(
+    requester_browser_uuid: str, target_browser_uuid: str, db: AsyncSession
+) -> int:
+    """Detach `target_browser_uuid` from the requester's sync account.
+
+    "Remote unlink" — e.g. the user is on their desktop and wants to
+    detach a lost/sold phone. Reuses `unlink`'s existing logic (it takes
+    any `browser_uuid`, not just a notion of "the current one") once
+    membership is verified; raises `DeviceNotInAccount` if the target
+    isn't actually in the requester's account, and `AlreadySolo` (from
+    `unlink`) in the edge case where the account has already shrunk to
+    one browser by the time this runs.
+    """
+    requester_result = await db.execute(
+        select(User.sync_account_id).where(User.browser_uuid == requester_browser_uuid)
+    )
+    requester_account_id = requester_result.scalar_one_or_none()
+
+    target_result = await db.execute(
+        select(User.sync_account_id).where(User.browser_uuid == target_browser_uuid)
+    )
+    target_account_id = target_result.scalar_one_or_none()
+
+    if (
+        requester_account_id is None
+        or target_account_id is None
+        or requester_account_id != target_account_id
+    ):
+        raise DeviceNotInAccount(
+            f"Browser {target_browser_uuid} is not in {requester_browser_uuid}'s "
+            "sync account"
+        )
+
+    return await unlink(browser_uuid=target_browser_uuid, db=db)
+
+
+async def get_device_names(
+    browser_uuids: List[str], db: AsyncSession
+) -> Dict[str, Optional[str]]:
+    """Batch-resolve `device_name` for a set of browser ids.
+
+    For cross-browser result attribution (`core_controller._annotate_source_browser`)
+    — one query per search response instead of one per result. A
+    `browser_uuid` missing from the returned dict (not yet a `users` row,
+    e.g. a BM25-only hit that was never persisted) and a `browser_uuid`
+    present but with a null `device_name` both resolve the same way for
+    callers using `.get()`: no name, fall back to the generic label.
+    """
+    if not browser_uuids:
+        return {}
+    result = await db.execute(
+        select(User.browser_uuid, User.device_name).where(
+            User.browser_uuid.in_(set(browser_uuids))
+        )
+    )
+    return dict(result.all())
 
 
 async def get_sync_status(browser_uuid: str, db: AsyncSession) -> dict:

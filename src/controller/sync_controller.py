@@ -12,20 +12,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.session import get_db
 from src.models.core import (
+    DevicesRequest,
     GenerateCodeRequest,
     RedeemCodeRequest,
+    RenameDeviceRequest,
     SyncStatusRequest,
+    UnlinkDeviceRequest,
     UnlinkRequest,
 )
 from src.services.sync_service.sync import (
     AlreadySolo,
+    DeviceNotInAccount,
     InvalidSyncCode,
     RateLimitExceeded,
     generate_code,
     get_page_counts,
     get_sync_status,
+    list_devices,
     redeem_code,
+    rename_device,
     unlink,
+    unlink_device,
 )
 from src.utility.logger import AppLogger
 from src.utility.settings import DATA_SCHEMA_VERSION
@@ -41,7 +48,11 @@ async def generate_code_route(
 ):
     """Issue a pairing code for the requesting browser's sync account."""
     try:
-        code, expires_at = await generate_code(browser_uuid=payload.browser_uuid, db=db)
+        code, expires_at = await generate_code(
+            browser_uuid=payload.browser_uuid,
+            db=db,
+            device_name=payload.device_name,
+        )
         return {"success": True, "code": code, "expiresAt": expires_at.isoformat()}
     except RateLimitExceeded as exc:
         raise HTTPException(
@@ -56,7 +67,10 @@ async def redeem_code_route(
     """Join the requesting browser to the sync account behind `code`."""
     try:
         sync_account_id = await redeem_code(
-            code=payload.code, browser_uuid=payload.browser_uuid, db=db
+            code=payload.code,
+            browser_uuid=payload.browser_uuid,
+            db=db,
+            device_name=payload.device_name,
         )
         return {"success": True, "syncAccountId": sync_account_id}
     except InvalidSyncCode as exc:
@@ -115,3 +129,68 @@ async def page_counts_route(
     values client-side.
     """
     return await get_page_counts(browser_uuid=payload.browser_uuid, db=db)
+
+
+@router.post("/devices", response_model=Dict[str, Any])
+async def list_devices_route(
+    payload: DevicesRequest, db: AsyncSession = Depends(get_db)
+):
+    """Return every browser in the requesting browser's sync account.
+
+    POST, not GET — same MV3 Origin-header reasoning as `/status`. Always
+    200 — a browser with no sync account gets an empty `devices` list, not
+    an error, same "not yet linked is normal" philosophy as `/status`.
+    """
+    return await list_devices(browser_uuid=payload.browser_uuid, db=db)
+
+
+@router.post("/devices/rename", response_model=Dict[str, Any])
+async def rename_device_route(
+    payload: RenameDeviceRequest, db: AsyncSession = Depends(get_db)
+):
+    """Rename any browser in the requesting browser's sync account.
+
+    Not limited to the requester's own browser — the user may be renaming
+    a device they aren't sitting at. 403s if `target_browser_uuid` isn't
+    actually in the requester's account (or doesn't exist).
+    """
+    try:
+        device = await rename_device(
+            requester_browser_uuid=payload.browser_uuid,
+            target_browser_uuid=payload.target_browser_uuid,
+            device_name=payload.device_name,
+            db=db,
+        )
+        return {"success": True, "device": device}
+    except DeviceNotInAccount as exc:
+        raise HTTPException(
+            status_code=403, detail={"success": False, "message": str(exc)}
+        )
+
+
+@router.post("/devices/unlink", response_model=Dict[str, Any])
+async def unlink_device_route(
+    payload: UnlinkDeviceRequest, db: AsyncSession = Depends(get_db)
+):
+    """Remotely unlink another browser from the requesting browser's account.
+
+    E.g. detaching a lost/sold device from the account without needing to
+    be signed in on it. 403s if `target_browser_uuid` isn't in the
+    requester's account; 400s if the account has already shrunk to one
+    browser (nothing left to unlink).
+    """
+    try:
+        sync_account_id = await unlink_device(
+            requester_browser_uuid=payload.browser_uuid,
+            target_browser_uuid=payload.target_browser_uuid,
+            db=db,
+        )
+        return {"success": True, "syncAccountId": sync_account_id}
+    except DeviceNotInAccount as exc:
+        raise HTTPException(
+            status_code=403, detail={"success": False, "message": str(exc)}
+        )
+    except AlreadySolo as exc:
+        raise HTTPException(
+            status_code=400, detail={"success": False, "message": str(exc)}
+        )

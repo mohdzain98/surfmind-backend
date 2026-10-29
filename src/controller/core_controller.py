@@ -33,7 +33,7 @@ from src.services.search_history_service.search_history import (
     get_recent_searches,
     persist_search,
 )
-from src.services.sync_service.sync import resolve_sync_account_id
+from src.services.sync_service.sync import get_device_names, resolve_sync_account_id
 from src.utility.logger import AppLogger
 
 logger = AppLogger.get_logger(__name__)
@@ -53,23 +53,43 @@ redis_client = redis.Redis(
 router = APIRouter(prefix="/v1", tags=["Core"])
 
 
-def _annotate_source_browser(docs: List[dict], requesting_browser_uuid: str) -> None:
-    """Mark each doc with whether it came from a different linked browser
-    than the one making this request.
+async def _annotate_source_browser(
+    docs: List[dict], requesting_browser_uuid: str, db: AsyncSession
+) -> None:
+    """Mark each doc with whether/which other linked browser it came from.
 
     Computed here, not left to the frontend, so the client only has to
-    render `metadata.found_on_other_browser` — no `browser_uuid` comparison
-    logic needed client-side. `source_browser_uuid` is absent on BM25-only
-    hits (not yet persisted to Postgres — see `rag.py::_merge_vector_hits`),
-    so those always come back `False` rather than an uncertain/missing tag.
+    render `metadata.found_on_other_browser`/`metadata.device_name` — no
+    `browser_uuid` comparison or lookup logic needed client-side.
+    `source_browser_uuid` is absent on BM25-only hits (not yet persisted to
+    Postgres — see `rag.py::_merge_vector_hits`), so those always come back
+    `False`/`None` rather than an uncertain/missing tag.
+
+    `device_name` is resolved with one batched query for every doc in the
+    response (not one query per doc) and falls back to `None` when the
+    source browser has no name set — the frontend shows its generic
+    "another browser" label in that case.
     """
+    other_browser_uuids = {
+        metadata.get("source_browser_uuid")
+        for doc in docs
+        if (metadata := doc.get("metadata")) is not None
+        and metadata.get("source_browser_uuid")
+        and metadata.get("source_browser_uuid") != requesting_browser_uuid
+    }
+    device_names = await get_device_names(list(other_browser_uuids), db)
+
     for doc in docs:
         metadata = doc.get("metadata")
         if metadata is None:
             continue
         source_browser_uuid = metadata.get("source_browser_uuid")
-        metadata["found_on_other_browser"] = bool(source_browser_uuid) and (
+        found_on_other_browser = bool(source_browser_uuid) and (
             source_browser_uuid != requesting_browser_uuid
+        )
+        metadata["found_on_other_browser"] = found_on_other_browser
+        metadata["device_name"] = (
+            device_names.get(source_browser_uuid) if found_on_other_browser else None
         )
 
 
@@ -267,7 +287,7 @@ async def search(
             data=payload, history=history_data, user_id=str(sync_account_id), db=db
         )
         duration_ms = int((time.monotonic() - start) * 1000)
-        _annotate_source_browser(response.docs, payload.user_id)
+        await _annotate_source_browser(response.docs, payload.user_id, db)
         if response.success:
             background_tasks.add_task(
                 persist_search,
@@ -349,7 +369,9 @@ async def search_stream(
             async for event in gen:
                 if event.get("step") == "final":
                     data = event.get("data") or {}
-                    _annotate_source_browser(data.get("docs") or [], payload.user_id)
+                    await _annotate_source_browser(
+                        data.get("docs") or [], payload.user_id, db
+                    )
                     result_holder["data"] = data
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as exc:
