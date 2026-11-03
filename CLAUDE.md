@@ -54,6 +54,9 @@ ruff check .
 There is no test suite in this repo currently — changes are verified with
 ad-hoc scripts against a real local Postgres/Redis instead.
 
+A `Makefile` wraps the commands above: `make venv`/`install`/`migrate`/
+`run`/`admin username=<name>`/`format`/`lint`/`check`/`clean`.
+
 ## Architecture
 
 `main_controller.py` (FastAPI app, CORS, startup Postgres/Redis connectivity
@@ -69,10 +72,14 @@ logging, the DB log listener) mounts three routers: `core_controller.py`
   browser id, so paired browsers share one pool/cap.
 - **`POST /v1/search`** / **`POST /v1/search-stream`** (SSE) run
   `CoreRetrieval.invoke_rag`/`stream_rag`/`stream_combined_rag`. Every doc
-  in the response carries `metadata.found_on_other_browser` (computed
-  server-side by comparing `source_browser_uuid` against the requesting
-  browser — the frontend just renders the flag, no client-side comparison
-  needed).
+  in the response carries `metadata.found_on_other_browser` and
+  `metadata.device_name` (computed server-side by comparing
+  `source_browser_uuid` against the requesting browser and batch-resolving
+  `users.device_name` — the frontend just renders the fields, no
+  client-side comparison/lookup needed). `SearchRequest.folder`
+  (bookmark-only) restricts retrieval to a folder and everything nested
+  under it — a prefix match on `Page.folder`'s `" / "`-delimited path, not
+  an exact match.
 - Endpoints that need identity for MV3 service workers are **POST**, not
   GET — a GET request from an MV3 background service worker doesn't
   reliably carry an `Origin` header, which breaks nginx's Origin-allowlist
@@ -88,8 +95,11 @@ sync's sections can otherwise collectively exceed OpenAI's 300k-token
 per-request cap and fail the *entire* embedding step at once (hit live in
 prod). Every embedding call also records an `LLMUsage` row
 (`use_case="embeddings"`) for cost tracking. `_trim_to_cap` evicts oldest
-pages beyond the per-flag retention cap (`history_cap`/`bookmark_cap`,
-env-tiered in `config/params.yml`) after every ingest.
+pages beyond the per-flag retention cap after every ingest —
+`history_cap` is tier-split (`config/params.<env>.yml`: free=100,
+matching the extension's own local retention window; pro=500), while
+`bookmark_cap` stays flat (250 — no real "pro" tier is reachable yet, so
+it isn't tier-split).
 
 Two attribution columns on `Page`, easy to confuse:
 - `source_browser_uuid` — set on **insert only**, never overwritten. "Who
@@ -99,7 +109,11 @@ Two attribution columns on `Page`, easy to confuse:
   *this* browser's sync actually land," used by
   `sync_service.get_page_counts` (`POST /v1/sync/page-counts`) so the
   extension can compare its local counts against what's actually
-  persisted and decide whether to offer a manual resync.
+  persisted and decide whether to offer a manual resync. The response
+  also includes account-wide `*_total` (every paired browser combined)
+  and the resolved `*_cap`, so the extension can tell "behind my other
+  devices" apart from "account is at its retention cap" without
+  hardcoding cap values client-side.
 
 ### Sync/pairing (`src/services/sync_service/sync.py`, `sync_controller.py`)
 `browser_uuid` → `sync_account_id` via `users`. `generate_code`/`redeem_code`
@@ -115,11 +129,25 @@ previously a silent no-op that just created an orphaned account).
 `delete_account` (admin-only) permanently removes a solo account; raises
 `AccountStillLinked` if it still has 2+ browsers.
 
+Named linked browsers: `users.device_name`/`linked_at`/`last_synced_at`.
+`generate_code`/`redeem_code` accept an optional `device_name` (trimmed,
+whitespace-collapsed, control-chars stripped, truncated at 40 — see
+`_normalize_device_name`; stored as plain text, never rejected for
+HTML-looking input since the frontend is responsible for rendering it as
+text, not the backend for sanitizing it). `POST /v1/sync/devices` lists
+every browser in the account; `/devices/rename` can rename any of them
+(not only the current one); `/devices/unlink` remotely detaches one,
+reusing `unlink`'s own logic once account membership is verified.
+`last_synced_at` is updated at the end of a successful `ingest_batch`,
+same transaction as the cap trim, so it never advances on a failed sync.
+
 `DATA_SCHEMA_VERSION` (`src/utility/settings.py`, exposed on `/health` and
 `/v1/sync/status`) lets the extension detect a backend storage/ingestion
 change that could strand already-"synced" local data (e.g. the Redis-only
 → Postgres migration did) and force one resync — bump it only when that
-kind of change ships.
+kind of change ships. Separately, `APP_VERSION` (read live from
+`pyproject.toml`, also exposed on `/health`) is this backend's own
+semantic version, independent of the frontend's.
 
 ### Retrieval (`src/services/core_service/rag.py`, `main.py`)
 **`HybridRAGService`** splits parent docs (full page content) into
@@ -167,7 +195,12 @@ maintained rate table — no live billing API exists), `status/search-metrics`,
 `status/nginx-logs` (tails nginx's log files directly off disk — a
 different source than `app_logs`, since nginx runs as its own process).
 `GET /accounts` (paginated, sortable, includes a normalized 0-100
-`activityScore`) and `/accounts/{id}` for lookup. Mutating actions
+`activityScore`) and `/accounts/{id}` for lookup, plus
+`/accounts/{id}/searches` (paginated recent searches — the same
+query/answer/sources rows the end-user accordion reads, for
+retrieval-quality review; a page beyond `search_history_retention_cap`
+always comes back empty since that cap is enforced at write time, not a
+bug in this route). Mutating actions
 (`unlink-browser`, `clear-data`, sync-code `revoke`, account `delete`) all
 log an entry back into `app_logs` as a lightweight audit trail.
 

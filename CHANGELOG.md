@@ -5,6 +5,56 @@ This backend didn't track changes before this file existed — the first
 entry covers everything landed in the initial Postgres migration commit,
 not a single day's work.
 
+## 2026-10-11 — Named linked browsers, bookmark folder search, tier-split retention, versioning
+
+### Added
+- Named linked browsers: `users.device_name`/`linked_at`/`last_synced_at`.
+  `generate-code`/`redeem-code` accept an optional `device_name`;
+  `POST /v1/sync/devices` lists every browser in the account,
+  `/devices/rename` renames any of them (not only the current one —
+  fixing a device you aren't sitting at), `/devices/unlink` remotely
+  detaches one (e.g. a lost/sold device), reusing the existing `unlink`
+  logic. Cross-browser search results now also carry the source
+  browser's `metadata.device_name`, falling back to `null` when unset.
+  Name validation trims/collapses whitespace, strips control characters,
+  and truncates at 40 chars rather than rejecting.
+- Bookmark-only folder-scoped search: `SearchRequest.folder` restricts
+  retrieval (both pgvector and the BM25 corpus) to a given folder path
+  and everything nested under it (prefix match on the existing
+  `" / "`-delimited `Page.folder`, e.g. `"Bookmarks bar / Work"` also
+  matches `"Bookmarks bar / Work / Reading"`) — no schema change needed,
+  `folder` was already persisted per bookmark. Ignored for
+  `flag="history"`; scopes only the bookmark leg of a `flag="combined"`
+  search.
+- `POST /v1/sync/page-counts` now also returns account-wide totals
+  (`history_total`/`bookmark_total`, every paired browser combined) and
+  the account's resolved caps (`history_cap`/`bookmark_cap`), so the
+  extension can tell "behind my other devices" apart from "account is at
+  its retention cap" without hardcoding cap values client-side.
+- `GET /v1/admin/accounts/{id}/searches` — paginated per-account recent
+  searches (query/answer/sources/timing), for retrieval-quality review in
+  the admin console.
+- Tier-split `history_cap` (free=100, matching the extension's own local
+  retention window; pro=500, unchanged) and `bookmark_cap` lowered from
+  500 to 250 (flat — no real "pro" tier is reachable yet).
+- Backend semantic versioning, starting at `1.80.1`/independent of the
+  frontend's own version — read live from `pyproject.toml`, exposed on
+  `/health` as `version`.
+- `Makefile` wrapping the setup/run/lint commands already documented in
+  `CLAUDE.md`.
+
+### Fixed
+- **Prod incident**: `systemctl` resolved fine over SSH but failed inside
+  gunicorn's own process environment on staging (PATH-resolution
+  difference, not a missing binary) — `status/health`'s service checks
+  now resolve `systemctl`'s absolute path once at import time
+  (`shutil.which` + standard-path fallback) instead of trusting a bare
+  command name.
+- A reported "Sync coverage" discrepancy (`100 local · 106 synced`,
+  flagged as out-of-sync) was expected behavior given a flat `history_cap`
+  of 500 versus the extension's own 100-item local window — resolved by
+  the tier-split cap above, not a retrieval/counting bug.
+
 ## 2026-09-20 — Admin API, cross-browser result attribution, pre-pairing recovery, cost tracking
 
 ### Added

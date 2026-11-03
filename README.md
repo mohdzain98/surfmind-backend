@@ -73,6 +73,22 @@ Health checks:
 - `GET /`
 - `GET /health`
 
+## Makefile
+
+Shortcuts for the commands above:
+
+| Target | Runs |
+|---|---|
+| `make venv` | `python3.11 -m venv .venv` |
+| `make install` | `pip install -r requirements.txt` |
+| `make migrate` | `alembic upgrade head` |
+| `make run` | `uvicorn ... --reload --host 0.0.0.0 --port 8000` |
+| `make admin username=<name>` | `python -m scripts.create_admin --username <name>` |
+| `make format` | `black .` |
+| `make lint` | `ruff check .` |
+| `make check` | `format` + `lint` together |
+| `make clean` | removes `__pycache__` dirs |
+
 ## API
 
 Base router prefix: `/v1`
