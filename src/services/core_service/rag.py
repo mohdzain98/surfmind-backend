@@ -144,7 +144,12 @@ class HybridRAGService:
                     )
                 )
 
-        if not child_docs:
+        if not child_docs and parent_docs:
+            # parent_docs had content but chunking produced nothing — a real
+            # invariant violation worth failing loudly on. An empty
+            # parent_docs (e.g. a cold Redis cache — see `retrieve_parents`)
+            # is the normal, expected case: BM25 just has nothing to index,
+            # pgvector still runs against Postgres's full persisted data.
             logger.error("No child documents created")
             raise ValueError("No child documents created from input data")
 
@@ -368,21 +373,34 @@ class HybridRAGService:
         # Step 1: build child docs (BM25 only — pgvector reads persisted rows)
         child_docs, parents = self._build_child_documents(parent_docs)
 
-        # Step 1.1: Build vocab once per request and expand query
-        vocabulary = self._build_vocabulary(child_docs)
-        expanded_query = self.expand_query_typo_tolerant(query, vocabulary)
+        # pgvector always runs — it's scoped by user_id/flag against
+        # Postgres directly, independent of whatever subset of this
+        # account's data happens to be sitting in the Redis-sourced
+        # `parent_docs`/`child_docs` right now (e.g. right after a
+        # different linked browser's sync overwrote the shared cache key,
+        # or the cache simply expired). BM25 only has something to search
+        # when there are child_docs to index.
+        if child_docs:
+            # Build vocab once per request and expand query
+            vocabulary = self._build_vocabulary(child_docs)
+            expanded_query = self.expand_query_typo_tolerant(query, vocabulary)
 
-        def _run_bm25() -> List[Document]:
-            bm25 = self._build_bm25_retriever(child_docs)
-            return bm25.invoke(expanded_query)
+            def _run_bm25() -> List[Document]:
+                bm25 = self._build_bm25_retriever(child_docs)
+                return bm25.invoke(expanded_query)
 
-        # Step 2 & 3: BM25 (sync, off the event loop) and pgvector concurrently
-        bm25_hits, vector_rows = await asyncio.gather(
-            asyncio.to_thread(_run_bm25),
-            self._run_pgvector(
+            # BM25 (sync, off the event loop) and pgvector concurrently
+            bm25_hits, vector_rows = await asyncio.gather(
+                asyncio.to_thread(_run_bm25),
+                self._run_pgvector(
+                    query=query, user_id=user_id, flag=flag, db=db, folder=folder
+                ),
+            )
+        else:
+            bm25_hits = []
+            vector_rows = await self._run_pgvector(
                 query=query, user_id=user_id, flag=flag, db=db, folder=folder
-            ),
-        )
+            )
 
         # Step 4: extend parents with vector-only hits, then merge + map back
         parents, vector_hits = self._merge_vector_hits(parents, vector_rows)
