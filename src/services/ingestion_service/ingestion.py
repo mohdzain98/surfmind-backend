@@ -402,6 +402,28 @@ async def ingest_batch(
     }
     all_items = [item for sections in url_groups.values() for item in sections]
 
+    # For bookmarks, `_bookmark_embedding_text` folds folder/title/domain
+    # into the embedding input — but those live on `Page`, not
+    # `PageSection`, and `_upsert_pages` below overwrites them
+    # unconditionally. Captured here, before the upsert, so a folder move
+    # (bookmark's `content` is usually just its title and doesn't change
+    # when it's re-filed) can still be detected as a reason to re-embed,
+    # instead of silently leaving a stale embedding that was computed
+    # under the old folder.
+    existing_bookmark_fields_by_hash: Dict[str, Tuple] = {}
+    if flag == "bookmark":
+        url_hashes = {url: _hash_url(url) for url in url_groups}
+        existing_pages = await db.execute(
+            select(Page.url_hash, Page.folder, Page.title, Page.domain).where(
+                Page.user_id == int(user_id),
+                Page.flag == flag,
+                Page.url_hash.in_(url_hashes.values()),
+            )
+        )
+        existing_bookmark_fields_by_hash = {
+            row.url_hash: (row.folder, row.title, row.domain) for row in existing_pages
+        }
+
     page_id_by_url = await _upsert_pages(url_groups, user_id, flag, browser_uuid, db)
 
     section_keys = [
@@ -418,10 +440,19 @@ async def ingest_batch(
         (row.page_id, tuple(row.heading_path or [])): row.content for row in existing
     }
 
+    def _is_changed(item: HistoryItem, key: Tuple) -> bool:
+        if existing_content_by_key.get(key) != item.content:
+            return True
+        if flag == "bookmark":
+            old_fields = existing_bookmark_fields_by_hash.get(_hash_url(item.url))
+            # None means this URL has no prior Page row (brand new) — the
+            # content comparison above already caught that case.
+            if old_fields is not None:
+                return old_fields != (item.folder, item.title, item.domain)
+        return False
+
     changed_items = [
-        item
-        for item, key in zip(all_items, section_keys)
-        if existing_content_by_key.get(key) != item.content
+        item for item, key in zip(all_items, section_keys) if _is_changed(item, key)
     ]
 
     stmt = pg_insert(PageSection).values(

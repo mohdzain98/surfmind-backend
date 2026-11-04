@@ -85,13 +85,17 @@ prompt:
     Below are numbered content blocks.
     Each block contains:
     - Title
+    - Folder (bookmarks only, when the user filed it under one — e.g. "Bookmarks bar /
+      cellus" strongly suggests the bookmark is about "cellus", even if its title/content
+      never say so directly)
     - Source URL
     - Content snippet
 
     Note: Some blocks may come from bookmarks, where the content is only the page title.
-    For such blocks, judge relevance using the Title and Source URL — do NOT penalise a
-    block just because its content is short or sparse. That is about length, not about
-    whether the subject matches — a short block about the right subject is still relevant.
+    For such blocks, judge relevance using the Title, Folder, and Source URL — do NOT
+    penalise a block just because its content is short or sparse. That is about length,
+    not about whether the subject matches — a short block about the right subject is
+    still relevant.
 
     Content blocks:
     {content_blocks}
@@ -102,7 +106,7 @@ prompt:
     A block is relevant only if:
     - Its Content substantively describes, answers, or is itself the subject the query
       asks about, OR
-    - For sparse bookmark blocks (title/URL only, no real content), the Title/URL
+    - For sparse bookmark blocks (title/URL only, no real content), the Title/Folder/URL
       unambiguously identify that subject.
 
     A block is NOT relevant if:
@@ -113,7 +117,8 @@ prompt:
     - It's about a different product, page, or topic — even one from the same person,
       company, or brand family, or one that merely shares similar branding/domain.
     - It belongs to a clearly unrelated domain (e.g., scholarships for a math query).
-    - Neither the Title, URL, nor Content substantively connects to the query's subject.
+    - Neither the Title, Folder, URL, nor Content substantively connects to the query's
+      subject.
 
     When you're unsure whether a mention is substantive or just a passing reference,
     treat it as NOT relevant. A false positive (keeping an off-topic source) is worse
