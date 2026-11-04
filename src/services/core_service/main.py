@@ -181,9 +181,11 @@ class CoreRetrieval:
         parent_docs = self._build_parent_documents(
             history=history, flag=flag, folder=folder
         )
-        if not parent_docs:
-            logger.warning("No history data found")
-            return self._empty_response("No history data found")
+        # No early return on an empty parent_docs — that's only this
+        # browser's Redis-cached view (cold cache, or a different linked
+        # browser's sync most recently overwrote the shared key) and
+        # retrieve_parents still runs pgvector against Postgres's full,
+        # authoritative account data regardless.
 
         # List of combined docs from bm25 and pgvector
         retrieved_parents = await self.rag.retrieve_parents(
@@ -247,10 +249,8 @@ class CoreRetrieval:
         parent_docs = self._build_parent_documents(
             history=history, flag=flag, folder=folder
         )
-        if not parent_docs:
-            res = self._empty_response("No history data found")
-            yield self._stream_event("final", res.dict())
-            return
+        # Same as invoke_rag — no early return on an empty parent_docs;
+        # retrieve_parents still runs pgvector against Postgres regardless.
 
         retrieved_parents = await self.rag.retrieve_parents(
             query=ques,
@@ -350,17 +350,13 @@ class CoreRetrieval:
         bookmark_docs = self._build_parent_documents(
             history=bookmarks, flag="bookmark", folder=data.folder
         )
-
-        if not history_docs and not bookmark_docs:
-            res = self._empty_response("No data found for combined search")
-            yield self._stream_event("final", res.dict())
-            return
+        # No early return when both are empty — that's only this browser's
+        # Redis-cached view; retrieve_parents still runs pgvector against
+        # Postgres's full account data for each flag regardless.
 
         async def _safe_retrieve(
             docs: List[Document], flag: str, folder: Optional[str] = None
         ) -> List[Document]:
-            if not docs:
-                return []
             try:
                 return await self.rag.retrieve_parents(
                     query=ques,
