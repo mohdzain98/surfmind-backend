@@ -400,6 +400,18 @@ async def search_stream(
         if not data:
             return
         duration_ms = int((time.monotonic() - stream_start) * 1000)
+        # Total request time (stream start to final event) for every
+        # completed search-stream call, Fast or Standard — logged
+        # unconditionally, independent of whether it's persisted below, so
+        # a no_match/failed search still counts toward a real latency
+        # comparison between the two modes.
+        logger.info(
+            "search-stream duration: mode=%s flag=%s duration_ms=%d query=%r",
+            data.get("mode", "standard"),
+            payload.flag,
+            duration_ms,
+            payload.query,
+        )
         if data.get("mode") == "fast":
             # Mirrors Standard's "only persist a genuinely successful
             # search" convention — a no_match fast search isn't worth
