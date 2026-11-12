@@ -351,7 +351,19 @@ async def search_stream(
 
     async def event_stream():
         try:
-            if payload.flag == "combined":
+            if payload.mode == "fast":
+                # Fast mode has its own pipeline (no post-processing/LLM)
+                # and its own final-event shape (`results`, not `docs`) —
+                # it already resolves device names itself, so it doesn't
+                # go through _annotate_source_browser below.
+                gen = service.stream_fast_search(
+                    data=payload,
+                    history=history_data,
+                    bookmarks=bookmark_data,
+                    user_id=str(sync_account_id),
+                    db=db,
+                )
+            elif payload.flag == "combined":
                 gen = service.stream_combined_rag(
                     data=payload,
                     history=history_data,
@@ -369,9 +381,10 @@ async def search_stream(
             async for event in gen:
                 if event.get("step") == "final":
                     data = event.get("data") or {}
-                    await _annotate_source_browser(
-                        data.get("docs") or [], payload.user_id, db
-                    )
+                    if payload.mode != "fast":
+                        await _annotate_source_browser(
+                            data.get("docs") or [], payload.user_id, db
+                        )
                     result_holder["data"] = data
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as exc:
@@ -384,8 +397,25 @@ async def search_stream(
 
     async def _persist_after_stream() -> None:
         data = result_holder.get("data")
-        if data and data.get("success"):
-            duration_ms = int((time.monotonic() - stream_start) * 1000)
+        if not data:
+            return
+        duration_ms = int((time.monotonic() - stream_start) * 1000)
+        if data.get("mode") == "fast":
+            # Mirrors Standard's "only persist a genuinely successful
+            # search" convention — a no_match fast search isn't worth
+            # saving to Recent Searches either.
+            if not data.get("no_match"):
+                await persist_search(
+                    user_id=str(sync_account_id),
+                    query=payload.query,
+                    flag=payload.flag,
+                    answer=None,
+                    sources=data.get("results", []),
+                    duration_ms=duration_ms,
+                    mode="fast",
+                    fast_strictness=data.get("fast_strictness"),
+                )
+        elif data.get("success"):
             await persist_search(
                 user_id=str(sync_account_id),
                 query=payload.query,

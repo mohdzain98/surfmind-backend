@@ -136,6 +136,17 @@ class SearchRequest(BaseModel):
     # nested under it — not a leaf-only exact match. Ignored for
     # flag="history"; for flag="combined" it scopes only the bookmark leg.
     folder: str | None = None
+    # "fast" skips post-processing/LLM entirely and returns ranked links
+    # straight from retrieval; anything else (including omitted, for old
+    # extension builds) behaves exactly as today. Loosely typed on purpose
+    # — `fast_strictness`/`max_results` are normalized in
+    # `fast_search.py`, never rejected with a 422 for a bad value.
+    mode: str = "standard"
+    fast_strictness: str | None = None  # only meaningful when mode == "fast"
+    # Any, not int | None — a strict int field 422s on garbage input (e.g.
+    # a non-numeric string) before fast_search.clamp_max_results ever gets
+    # a chance to fall back cleanly, breaking the "never error" contract.
+    max_results: Any = None  # only meaningful when mode == "fast"
 
 
 class SearchResponse(BaseModel):
