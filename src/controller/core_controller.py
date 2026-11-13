@@ -11,7 +11,15 @@ from typing import Any, Dict, List
 
 import redis
 from dotenv import load_dotenv
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.background import BackgroundTask
@@ -28,7 +36,12 @@ from src.models.core import (
 )
 from src.services.core_service.main import CoreRetrieval, Retrieval
 from src.services.ingestion_service.ingestion import _default_heading_path, ingest_batch
-from src.services.privacy_service.privacy import clear_all_data, clear_history
+from src.services.privacy_service.privacy import (
+    HISTORY_CLEAR_RANGES,
+    clear_all_data,
+    clear_history,
+    resolve_history_clear_range,
+)
 from src.services.search_history_service.search_history import (
     get_recent_searches,
     persist_search,
@@ -464,19 +477,38 @@ async def recent_searches_route(
 
 
 @router.delete("/user/history", response_model=Dict[str, Any])
-async def clear_history_route(browser_uuid: str, db: AsyncSession = Depends(get_db)):
+async def clear_history_route(
+    browser_uuid: str,
+    history_range: str = Query(default="24h", alias="range"),
+    db: AsyncSession = Depends(get_db),
+):
     """Delete this account's history pages/sections/embeddings and Redis
     cache. Bookmarks, search history, and account/sync setup are untouched.
     Scoped to `sync_account_id`, so a synced user's delete reaches every
     linked browser, not just the requesting one.
+
+    `range` (query param, e.g. `?range=7d`) is a named window — `"1h"`,
+    `"24h"` (default), `"7d"`, or `"30d"` — scoping the delete to history
+    visited within that window instead of all of it. A missing/
+    unrecognized value falls back to the default rather than erroring,
+    same convention as every other named option in this API (Fast mode's
+    `fast_strictness`, bookmark `folder`). Only `Page.visited_at` is
+    compared — a page last visited outside the window keeps its full row
+    even if it existed long before that too.
     """
     try:
         sync_account_id = await resolve_sync_account_id(
             browser_uuid=browser_uuid, db=db
         )
-        await clear_history(sync_account_id=sync_account_id, db=db)
+        resolved_range = resolve_history_clear_range(history_range)
+        cutoff = datetime.now(timezone.utc) - HISTORY_CLEAR_RANGES[resolved_range]
+        await clear_history(sync_account_id=sync_account_id, db=db, since=cutoff)
+        # Clears the Redis cache unconditionally, same as before a range
+        # existed — the deleted rows are gone from Postgres regardless of
+        # range, so the next search must rebuild its corpus either way;
+        # partially invalidating the cache isn't worth the complexity.
         await asyncio.to_thread(redis_client.delete, f"user:{sync_account_id}:history")
-        return {"status": "history_cleared"}
+        return {"status": "history_cleared", "range": resolved_range}
     except redis.ConnectionError as e:
         logger.error(f"Failed to connect to Redis: {e}")
         raise HTTPException(
