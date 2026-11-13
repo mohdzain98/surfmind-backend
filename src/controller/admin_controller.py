@@ -713,6 +713,10 @@ async def account_searches_route(
     `search_history_service.persist_search` on every new search, same as
     the page-count/bookmark caps. Not a bug in this route; the cap is
     enforced upstream, at write time.
+
+    `mode`/`fastStrictness` distinguish a Fast-mode row (`answer: null`,
+    `sources` holding Fast's result-list shape instead of Standard's
+    `docs` shape) from a Standard one.
     """
     account = await db.get(SyncAccount, sync_account_id)
     if account is None:
@@ -741,6 +745,8 @@ async def account_searches_route(
             "answer": row.answer,
             "sources": row.sources,
             "durationMs": row.duration_ms,
+            "mode": row.mode,
+            "fastStrictness": row.fast_strictness,
             "createdAt": row.created_at.isoformat(),
         }
         for row in result.scalars()
