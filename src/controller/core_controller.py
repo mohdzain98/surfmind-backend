@@ -488,20 +488,23 @@ async def clear_history_route(
     linked browser, not just the requesting one.
 
     `range` (query param, e.g. `?range=7d`) is a named window — `"1h"`,
-    `"24h"` (default), `"7d"`, or `"30d"` — scoping the delete to history
-    visited within that window instead of all of it. A missing/
-    unrecognized value falls back to the default rather than erroring,
-    same convention as every other named option in this API (Fast mode's
-    `fast_strictness`, bookmark `folder`). Only `Page.visited_at` is
-    compared — a page last visited outside the window keeps its full row
-    even if it existed long before that too.
+    `"24h"` (default), `"7d"`, `"30d"`, or `"all"` — scoping the delete to
+    history visited within that window instead of all of it. `"all"` is
+    the full wipe (no cutoff at all), same as this endpoint's original
+    behavior before `range` existed. A missing/unrecognized value falls
+    back to the default rather than erroring, same convention as every
+    other named option in this API (Fast mode's `fast_strictness`,
+    bookmark `folder`). Only `Page.visited_at` is compared — a page last
+    visited outside the window keeps its full row even if it existed long
+    before that too.
     """
     try:
         sync_account_id = await resolve_sync_account_id(
             browser_uuid=browser_uuid, db=db
         )
         resolved_range = resolve_history_clear_range(history_range)
-        cutoff = datetime.now(timezone.utc) - HISTORY_CLEAR_RANGES[resolved_range]
+        delta = HISTORY_CLEAR_RANGES[resolved_range]
+        cutoff = datetime.now(timezone.utc) - delta if delta is not None else None
         await clear_history(sync_account_id=sync_account_id, db=db, since=cutoff)
         # Clears the Redis cache unconditionally, same as before a range
         # existed — the deleted rows are gone from Postgres regardless of

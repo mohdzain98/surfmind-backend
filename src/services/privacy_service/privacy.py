@@ -22,11 +22,14 @@ from src.db.models import Page, SearchHistory
 # whatever the UI happens to have stored. Default is "24h" per product
 # decision; an unrecognized/missing name falls back to it rather than
 # erroring, consistent with every other optional-enum field in this API.
-HISTORY_CLEAR_RANGES: dict[str, timedelta] = {
+# "all" maps to `None` (no cutoff) — clear_history already treats
+# `since=None` as "delete everything," so this is the full-wipe option.
+HISTORY_CLEAR_RANGES: dict[str, Optional[timedelta]] = {
     "1h": timedelta(hours=1),
     "24h": timedelta(hours=24),
     "7d": timedelta(days=7),
     "30d": timedelta(days=30),
+    "all": None,
 }
 HISTORY_CLEAR_DEFAULT_RANGE = "24h"
 
