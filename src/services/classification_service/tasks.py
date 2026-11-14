@@ -33,11 +33,20 @@ _CONTENT_TRUNCATE_CHARS = 2000
 
 async def count_unclassified_pages(sync_account_id: int, db: AsyncSession) -> int:
     """Cheap existence check for the trigger endpoint — avoids queuing a
-    Celery task when there's genuinely nothing to do."""
+    Celery task when there's genuinely nothing to do.
+
+    History only, for now — no real "pro" tier exists yet to gate
+    bookmark categorization behind, so it's simplest to not categorize
+    bookmarks at all rather than offer it to everyone for free.
+    """
     result = await db.execute(
         select(func.count())
         .select_from(Page)
-        .where(Page.user_id == sync_account_id, Page.category_id.is_(None))
+        .where(
+            Page.user_id == sync_account_id,
+            Page.flag == "history",
+            Page.category_id.is_(None),
+        )
     )
     return result.scalar_one()
 
@@ -45,6 +54,7 @@ async def count_unclassified_pages(sync_account_id: int, db: AsyncSession) -> in
 async def _get_classification_targets(
     sync_account_id: int, reclassify_all: bool, db: AsyncSession
 ) -> list[dict]:
+    # History only, for now — see count_unclassified_pages.
     query = (
         select(
             Page.id,
@@ -54,7 +64,7 @@ async def _get_classification_targets(
             func.string_agg(PageSection.content, " ").label("content"),
         )
         .join(PageSection, PageSection.page_id == Page.id)
-        .where(Page.user_id == sync_account_id)
+        .where(Page.user_id == sync_account_id, Page.flag == "history")
         .group_by(Page.id)
     )
     if not reclassify_all:

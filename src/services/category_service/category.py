@@ -152,10 +152,14 @@ async def delete_category(
 
 
 async def list_categorized_pages(sync_account_id: int, db: AsyncSession) -> dict:
-    """Every page for this account, grouped by category — the UI's "here
-    are all the pages classified as Work" view. Pages with no category
-    yet (never classified, or uncategorized by a category delete) come
-    back under `uncategorized`, not silently dropped.
+    """Every history page for this account, grouped by category — the
+    UI's "here are all the pages classified as Work" view. Pages with no
+    category yet (never classified, or uncategorized by a category
+    delete) come back under `uncategorized`, not silently dropped.
+
+    History only, for now (see classification_service.tasks) — bookmarks
+    are excluded rather than listed as permanently "uncategorized," which
+    would be confusing noise since they're never actually eligible.
     """
     categories = await list_categories(sync_account_id, db)
     by_id = {cat["id"]: {**cat, "pages": []} for cat in categories}
@@ -172,7 +176,7 @@ async def list_categorized_pages(sync_account_id: int, db: AsyncSession) -> dict
             Page.category_id,
             Page.category_confidence,
             Page.visited_at,
-        ).where(Page.user_id == sync_account_id)
+        ).where(Page.user_id == sync_account_id, Page.flag == "history")
     )
     for row in result:
         page = {
@@ -204,7 +208,10 @@ async def get_search_category_analytics(
 
     A source URL with no matching `pages` row (e.g. since evicted by the
     retention cap) simply isn't counted — this is a best-effort signal,
-    not an audit trail.
+    not an audit trail. Joined to history pages only, for now (see
+    classification_service.tasks) — a bookmark hit would otherwise always
+    fall into "Uncategorized" since it's never actually eligible, diluting
+    the signal this is meant to give.
     """
     result = await db.execute(
         text("""
@@ -216,6 +223,7 @@ async def get_search_category_analytics(
             JOIN pages p
                 ON p.user_id = sh.user_id
                 AND p.url_hash = md5(source_elem->'metadata'->>'source')
+                AND p.flag = 'history'
             LEFT JOIN categories c ON c.id = p.category_id
             WHERE sh.user_id = :user_id AND sh.sources IS NOT NULL
             GROUP BY c.id, c.name

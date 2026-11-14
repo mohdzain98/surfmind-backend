@@ -225,11 +225,23 @@ async def stats_route(
     )
     page_counts = {flag: count for flag, count in page_counts_result.all()}
 
+    categorization_enabled_accounts = (
+        await db.execute(
+            select(func.count())
+            .select_from(SyncAccount)
+            .where(SyncAccount.categorization_enabled.is_(True))
+        )
+    ).scalar_one()
+
     return {
         "total_accounts": total_accounts,
         "linked_accounts": linked_accounts,
         "total_pages_history": page_counts.get("history", 0),
         "total_pages_bookmark": page_counts.get("bookmark", 0),
+        # "How many users opened/enabled the categorize option" — history
+        # only for now (see classification_service.tasks), so this counts
+        # adoption of the feature as a whole, not a per-flag split.
+        "categorization_enabled_accounts": categorization_enabled_accounts,
     }
 
 
