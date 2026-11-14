@@ -144,7 +144,12 @@ class HybridRAGService:
                     )
                 )
 
-        if not child_docs:
+        if not child_docs and parent_docs:
+            # parent_docs had content but chunking produced nothing — a real
+            # invariant violation worth failing loudly on. An empty
+            # parent_docs (e.g. a cold Redis cache — see `retrieve_parents`)
+            # is the normal, expected case: BM25 just has nothing to index,
+            # pgvector still runs against Postgres's full persisted data.
             logger.error("No child documents created")
             raise ValueError("No child documents created from input data")
 
@@ -220,7 +225,13 @@ class HybridRAGService:
         return bm25
 
     async def _run_pgvector(
-        self, query: str, user_id: str, flag: str, db: AsyncSession
+        self,
+        query: str,
+        user_id: str,
+        flag: str,
+        db: AsyncSession,
+        folder: Optional[str] = None,
+        k_override: Optional[int] = None,
     ) -> List[dict]:
         """Rank this user's `flag`-scoped pages by their single best-matching section.
 
@@ -234,13 +245,37 @@ class HybridRAGService:
         can't surface bookmark pages and vice versa — combined search gets
         full history+bookmark coverage by calling this twice, once per
         flag, not by leaving it unscoped here.
+
+        `folder` (bookmark-only) additionally restricts to that folder and
+        everything nested under it — `p.folder = :folder` for an exact
+        match, `LIKE :folder_prefix` for anything nested (the trailing
+        `" / %"` stops a filter of `"Bookmarks bar"` from also matching a
+        sibling like `"Bookmarks bar 2"`). Skipped entirely when `folder`
+        is falsy, so history/unfiltered bookmark search is unaffected.
+
+        `k_override` widens `LIMIT :k` beyond `self.vector_k` — Fast mode
+        thresholds candidates *after* retrieval, so it needs more of them
+        to filter from than Standard mode's small fused-ranking k.
         """
         query_vector = await self.embeddings.aembed_query(query)
         # Bound as a pgvector text literal + explicit cast — avoids needing
         # asyncpg codec registration just to bind a raw SQL query.
         embedding_literal = "[" + ",".join(str(v) for v in query_vector) + "]"
+        params = {
+            # pages.user_id is a real Integer FK now (was a loose String
+            # column on the old history_entries table).
+            "user_id": int(user_id),
+            "flag": flag,
+            "query_embedding": embedding_literal,
+            "k": k_override or self.vector_k,
+        }
+        folder_clause = ""
+        if folder:
+            folder_clause = "AND (p.folder = :folder OR p.folder LIKE :folder_prefix)"
+            params["folder"] = folder
+            params["folder_prefix"] = folder + " / %"
         result = await db.execute(
-            text("""
+            text(f"""
                 SELECT * FROM (
                     SELECT DISTINCT ON (p.id)
                         p.url, p.title, p.domain, p.folder, p.flag, p.page_type,
@@ -251,20 +286,13 @@ class HybridRAGService:
                     FROM section_embeddings e
                     JOIN page_sections ps ON ps.id = e.section_id
                     JOIN pages p ON p.id = ps.page_id
-                    WHERE p.user_id = :user_id AND p.flag = :flag
+                    WHERE p.user_id = :user_id AND p.flag = :flag {folder_clause}
                     ORDER BY p.id, e.embedding <=> CAST(:query_embedding AS vector)
                 ) ranked
                 ORDER BY distance
                 LIMIT :k
                 """),
-            {
-                # pages.user_id is a real Integer FK now (was a loose String
-                # column on the old history_entries table).
-                "user_id": int(user_id),
-                "flag": flag,
-                "query_embedding": embedding_literal,
-                "k": self.vector_k,
-            },
+            params,
         )
         return [dict(row._mapping) for row in result]
 
@@ -315,6 +343,15 @@ class HybridRAGService:
                             "section_index": row.get("section_index"),
                             "page_type": row.get("page_type"),
                             "source_browser_uuid": row.get("source_browser_uuid"),
+                            # Cosine distance (lower = closer) — the one
+                            # signal with a stable, absolute scale, unlike
+                            # _map_to_parents' rank-fused score. Kept here
+                            # (not just on the raw row) so Fast mode's
+                            # threshold step can read it straight off the
+                            # parent Document it already has. Absent on a
+                            # BM25-only parent — not every parent passes
+                            # through this function.
+                            "vector_distance": row["distance"],
                         },
                     )
                 )
@@ -324,6 +361,7 @@ class HybridRAGService:
                 parents[pid].metadata["source_browser_uuid"] = row.get(
                     "source_browser_uuid"
                 )
+                parents[pid].metadata["vector_distance"] = row["distance"]
             hits_with_pid.append({**row, "parent_id": pid})
         return parents, hits_with_pid
 
@@ -334,29 +372,64 @@ class HybridRAGService:
         user_id: str,
         flag: str,
         db: AsyncSession,
+        folder: Optional[str] = None,
+        k_override: Optional[int] = None,
     ) -> List[Document]:
         """
         Main hybrid retrieval entrypoint.
         Returns parent-level documents, ranked by combined BM25 + pgvector score.
         `flag` scopes both signals to one corpus (history or bookmark) —
         callers wanting combined coverage call this twice, once per flag.
+        `folder` (bookmark-only) additionally scopes pgvector to that folder
+        and everything nested under it — `parent_docs` is expected to
+        already be pre-filtered by folder on the BM25/caller side (see
+        `CoreRetrieval._build_parent_documents`), so this only needs to
+        pass it through to the Postgres side.
+        `k_override` is passed straight through to `_run_pgvector` — see
+        its docstring (Fast mode thresholds after retrieval, so it wants
+        more candidates than Standard's small fused-ranking k).
         """
         # Step 1: build child docs (BM25 only — pgvector reads persisted rows)
         child_docs, parents = self._build_child_documents(parent_docs)
 
-        # Step 1.1: Build vocab once per request and expand query
-        vocabulary = self._build_vocabulary(child_docs)
-        expanded_query = self.expand_query_typo_tolerant(query, vocabulary)
+        # pgvector always runs — it's scoped by user_id/flag against
+        # Postgres directly, independent of whatever subset of this
+        # account's data happens to be sitting in the Redis-sourced
+        # `parent_docs`/`child_docs` right now (e.g. right after a
+        # different linked browser's sync overwrote the shared cache key,
+        # or the cache simply expired). BM25 only has something to search
+        # when there are child_docs to index.
+        if child_docs:
+            # Build vocab once per request and expand query
+            vocabulary = self._build_vocabulary(child_docs)
+            expanded_query = self.expand_query_typo_tolerant(query, vocabulary)
 
-        def _run_bm25() -> List[Document]:
-            bm25 = self._build_bm25_retriever(child_docs)
-            return bm25.invoke(expanded_query)
+            def _run_bm25() -> List[Document]:
+                bm25 = self._build_bm25_retriever(child_docs)
+                return bm25.invoke(expanded_query)
 
-        # Step 2 & 3: BM25 (sync, off the event loop) and pgvector concurrently
-        bm25_hits, vector_rows = await asyncio.gather(
-            asyncio.to_thread(_run_bm25),
-            self._run_pgvector(query=query, user_id=user_id, flag=flag, db=db),
-        )
+            # BM25 (sync, off the event loop) and pgvector concurrently
+            bm25_hits, vector_rows = await asyncio.gather(
+                asyncio.to_thread(_run_bm25),
+                self._run_pgvector(
+                    query=query,
+                    user_id=user_id,
+                    flag=flag,
+                    db=db,
+                    folder=folder,
+                    k_override=k_override,
+                ),
+            )
+        else:
+            bm25_hits = []
+            vector_rows = await self._run_pgvector(
+                query=query,
+                user_id=user_id,
+                flag=flag,
+                db=db,
+                folder=folder,
+                k_override=k_override,
+            )
 
         # Step 4: extend parents with vector-only hits, then merge + map back
         parents, vector_hits = self._merge_vector_hits(parents, vector_rows)

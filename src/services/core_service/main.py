@@ -10,10 +10,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import LLMUsage
 from src.models.core import Document, SearchRequest, SearchResponse
+from src.services.core_service.fast_search import (
+    apply_threshold,
+    clamp_max_results,
+    resolve_preset,
+    serialize_fast_result,
+)
 from src.services.core_service.rag import HybridRAGService, LLMRag
 from src.services.llm_service.llm_provider import LLMProvider
 from src.services.post_processing_service.post_processing import PostProcessing
+from src.services.sync_service.sync import get_device_names
 from src.utility.logger import AppLogger
+from src.utility.settings import settings
 
 logger = AppLogger.get_logger(__name__)
 
@@ -32,15 +40,33 @@ class CoreRetrieval:
         self.rag = HybridRAGService()
         self.llm_rag = LLMRag()
 
+    def _matches_folder(self, item_folder: str, folder: str) -> bool:
+        """True if `item_folder` is `folder` itself or nested under it.
+
+        Folder paths are stored/sent as `"Bookmarks bar / Work / Reading"`
+        — a prefix check on `folder + " / "` (not a plain `startswith`)
+        stops `"Bookmarks bar 2"` from matching a filter of
+        `"Bookmarks bar"`.
+        """
+        return item_folder == folder or item_folder.startswith(folder + " / ")
+
     def _build_parent_documents(
-        self, history: List[dict[str, str]], flag: str
+        self,
+        history: List[dict[str, str]],
+        flag: str,
+        folder: Optional[str] = None,
     ) -> List[Document]:
         """Convert raw history items into parent Document objects.
         Maps fields to metadata used by retrieval and post-processing.
+        `folder` (bookmark-only) restricts this to that folder and
+        everything nested under it — ignored for flag="history".
         Returns a list of parent-level documents for chunking.
         """
         docs: List[Document] = []
         for item in history:
+            if folder and flag == "bookmark":
+                if not self._matches_folder(item.get("folder", "") or "", folder):
+                    continue
             title = item.get("title", "")
             # Mirrors ingestion_service._default_heading_path exactly — must
             # match what's persisted in Postgres so pgvector hits for the
@@ -159,10 +185,15 @@ class CoreRetrieval:
         """
         ques = data.query
         flag = data.flag
-        parent_docs = self._build_parent_documents(history=history, flag=flag)
-        if not parent_docs:
-            logger.warning("No history data found")
-            return self._empty_response("No history data found")
+        folder = data.folder if flag == "bookmark" else None
+        parent_docs = self._build_parent_documents(
+            history=history, flag=flag, folder=folder
+        )
+        # No early return on an empty parent_docs — that's only this
+        # browser's Redis-cached view (cold cache, or a different linked
+        # browser's sync most recently overwrote the shared key) and
+        # retrieve_parents still runs pgvector against Postgres's full,
+        # authoritative account data regardless.
 
         # List of combined docs from bm25 and pgvector
         retrieved_parents = await self.rag.retrieve_parents(
@@ -171,6 +202,7 @@ class CoreRetrieval:
             user_id=user_id,
             flag=flag,
             db=db,
+            folder=folder,
         )
         if not retrieved_parents:
             logger.warning("No relevant data found")
@@ -221,11 +253,12 @@ class CoreRetrieval:
         """
         ques = data.query
         flag = data.flag
-        parent_docs = self._build_parent_documents(history=history, flag=flag)
-        if not parent_docs:
-            res = self._empty_response("No history data found")
-            yield self._stream_event("final", res.dict())
-            return
+        folder = data.folder if flag == "bookmark" else None
+        parent_docs = self._build_parent_documents(
+            history=history, flag=flag, folder=folder
+        )
+        # Same as invoke_rag — no early return on an empty parent_docs;
+        # retrieve_parents still runs pgvector against Postgres regardless.
 
         retrieved_parents = await self.rag.retrieve_parents(
             query=ques,
@@ -233,6 +266,7 @@ class CoreRetrieval:
             user_id=user_id,
             flag=flag,
             db=db,
+            folder=folder,
         )
         yield self._stream_event(
             "retrieved_parents",
@@ -321,19 +355,24 @@ class CoreRetrieval:
         """
         ques = data.query
         history_docs = self._build_parent_documents(history=history, flag="history")
-        bookmark_docs = self._build_parent_documents(history=bookmarks, flag="bookmark")
+        bookmark_docs = self._build_parent_documents(
+            history=bookmarks, flag="bookmark", folder=data.folder
+        )
+        # No early return when both are empty — that's only this browser's
+        # Redis-cached view; retrieve_parents still runs pgvector against
+        # Postgres's full account data for each flag regardless.
 
-        if not history_docs and not bookmark_docs:
-            res = self._empty_response("No data found for combined search")
-            yield self._stream_event("final", res.dict())
-            return
-
-        async def _safe_retrieve(docs: List[Document], flag: str) -> List[Document]:
-            if not docs:
-                return []
+        async def _safe_retrieve(
+            docs: List[Document], flag: str, folder: Optional[str] = None
+        ) -> List[Document]:
             try:
                 return await self.rag.retrieve_parents(
-                    query=ques, parent_docs=docs, user_id=user_id, flag=flag, db=db
+                    query=ques,
+                    parent_docs=docs,
+                    user_id=user_id,
+                    flag=flag,
+                    db=db,
+                    folder=folder,
                 )
             except Exception as exc:
                 logger.warning("Retrieval failed for corpus: %s", exc)
@@ -346,7 +385,9 @@ class CoreRetrieval:
         # coverage comes from making both calls, not from either call being
         # unscoped.
         history_parents = await _safe_retrieve(history_docs, flag="history")
-        bookmark_parents = await _safe_retrieve(bookmark_docs, flag="bookmark")
+        bookmark_parents = await _safe_retrieve(
+            bookmark_docs, flag="bookmark", folder=data.folder
+        )
 
         total_retrieved = len(history_parents) + len(bookmark_parents)
         yield self._stream_event("retrieved_parents", {"count": total_retrieved})
@@ -420,6 +461,87 @@ class CoreRetrieval:
             docs=validated_docs,
         )
         yield self._stream_event("final", res.model_dump())
+
+    async def stream_fast_search(
+        self,
+        data: SearchRequest,
+        history: List[dict],
+        bookmarks: List[dict],
+        user_id: str,
+        db: AsyncSession,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Stream Fast mode's progress/result via SSE — retrieval only.
+
+        No `PostProcessing`/`LLMRag` stages and no LLM calls at all,
+        unlike `stream_rag`/`stream_combined_rag` — results come straight
+        from `HybridRAGService.retrieve_parents`, filtered by the user's
+        strictness preset instead of an LLM judge. Reuses the same hybrid
+        retrieval (BM25 + pgvector, folder filters, per-page dedup) as
+        Standard mode; only what happens *after* retrieval differs. See
+        `docs/task_and_plans/fast_mode.md`.
+        """
+        preset_name, preset = resolve_preset(data.fast_strictness)
+        max_results = clamp_max_results(data.max_results, preset["max_results"])
+        retrieve_k = settings.fast_mode_max_results_cap
+
+        async def _retrieve_flag(
+            items: List[dict], flag: str, folder: Optional[str] = None
+        ) -> List[Tuple[Document, float]]:
+            docs = self._build_parent_documents(history=items, flag=flag, folder=folder)
+            parents = await self.rag.retrieve_parents(
+                query=data.query,
+                parent_docs=docs,
+                user_id=user_id,
+                flag=flag,
+                db=db,
+                folder=folder,
+                k_override=retrieve_k,
+            )
+            return apply_threshold(parents, preset)
+
+        retrieval_start = time.monotonic()
+        if data.flag == "combined":
+            # Thresholded independently per flag, same reasoning as
+            # stream_combined_rag's separate post-processing passes — a
+            # weak bookmark corpus shouldn't be crowded out by a stronger
+            # history one before each gets its own fair floor.
+            history_scored = await _retrieve_flag(history, flag="history")
+            bookmark_scored = await _retrieve_flag(
+                bookmarks, flag="bookmark", folder=data.folder
+            )
+            scored = history_scored[:max_results] + bookmark_scored[:max_results]
+        else:
+            folder = data.folder if data.flag == "bookmark" else None
+            scored = (await _retrieve_flag(history, flag=data.flag, folder=folder))[
+                :max_results
+            ]
+        retrieval_ms = int((time.monotonic() - retrieval_start) * 1000)
+        logger.print(
+            "fast search retrieval",
+            {"retrieval_ms": retrieval_ms, "candidates_kept": len(scored)},
+        )
+
+        yield self._stream_event("retrieved_parents", {"count": len(scored)})
+
+        other_browser_uuids = {
+            doc.metadata.get("source_browser_uuid")
+            for doc, _ in scored
+            if doc.metadata.get("source_browser_uuid")
+            and doc.metadata.get("source_browser_uuid") != data.user_id
+        }
+        device_names = await get_device_names(list(other_browser_uuids), db)
+
+        results = [
+            serialize_fast_result(doc, similarity, data.user_id, device_names)
+            for doc, similarity in scored
+        ]
+        final_payload = {
+            "mode": "fast",
+            "results": results,
+            "no_match": len(results) == 0,
+            "fast_strictness": preset_name,
+        }
+        yield self._stream_event("final", final_payload)
 
     def mock_stream_rag(
         self,

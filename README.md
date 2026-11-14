@@ -1,5 +1,7 @@
 # SurfMind Backend
 
+![Version](https://img.shields.io/badge/version-1.81.0-blue)
+
 FastAPI service for SurfMind's retrieval pipeline. It accepts browser history
 and bookmark payloads, caches them in Redis, persists them to Postgres with
 pgvector embeddings, and answers search requests using hybrid retrieval
@@ -70,6 +72,22 @@ Health checks:
 
 - `GET /`
 - `GET /health`
+
+## Makefile
+
+Shortcuts for the commands above:
+
+| Target | Runs |
+|---|---|
+| `make venv` | `python3.11 -m venv .venv` |
+| `make install` | `pip install -r requirements.txt` |
+| `make migrate` | `alembic upgrade head` |
+| `make run` | `uvicorn ... --reload --host 0.0.0.0 --port 8000` |
+| `make admin username=<name>` | `python -m scripts.create_admin --username <name>` |
+| `make format` | `black .` |
+| `make lint` | `ruff check .` |
+| `make check` | `format` + `lint` together |
+| `make clean` | removes `__pycache__` dirs |
 
 ## API
 

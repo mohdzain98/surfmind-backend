@@ -18,11 +18,18 @@ from typing import Dict, List, Tuple
 
 import tiktoken
 from langchain_core.output_parsers import StrOutputParser
-from sqlalchemy import case, delete, func, select
+from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models import Page, PageSection, SectionEmbedding, SyncAccount
+from src.db.models import (
+    LLMUsage,
+    Page,
+    PageSection,
+    SectionEmbedding,
+    SyncAccount,
+    User,
+)
 from src.models.ai_models import Models
 from src.models.core import HistoryItem
 from src.services.llm_service.llm_provider import LLMProvider
@@ -42,17 +49,21 @@ _TOKEN_ENCODING = tiktoken.get_encoding("cl100k_base")
 _MAX_TOKENS_PER_EMBED_REQUEST = 250_000
 
 
-def _chunk_by_token_budget(inputs: List[str]) -> List[List[int]]:
+def _chunk_by_token_budget(inputs: List[str]) -> Tuple[List[List[int]], int]:
     """Group `inputs`' indices into batches that stay under the token budget.
 
     A single input whose own token count already exceeds the budget can't
     be helped by batching — truncated in place (by token count, not
     characters, so the cut lands on a real token boundary) and logged,
-    rather than letting one outlier crash the whole batch.
+    rather than letting one outlier crash the whole batch. Also returns the
+    total token count across all (possibly-truncated) inputs, so callers
+    recording usage for cost tracking don't need to re-encode everything a
+    second time.
     """
     batches: List[List[int]] = []
     current: List[int] = []
     current_tokens = 0
+    total_tokens = 0
     for i, text in enumerate(inputs):
         tokens = _TOKEN_ENCODING.encode(text)
         if len(tokens) > _MAX_TOKENS_PER_EMBED_REQUEST:
@@ -69,14 +80,18 @@ def _chunk_by_token_budget(inputs: List[str]) -> List[List[int]]:
             current, current_tokens = [], 0
         current.append(i)
         current_tokens += len(tokens)
+        total_tokens += len(tokens)
     if current:
         batches.append(current)
-    return batches
+    return batches, total_tokens
 
 
-def _cap_for(flag: str) -> int:
-    """Return the dev/prod-tiered page retention cap for a flag (config/params.yml)."""
-    return settings.bookmark_cap if flag == "bookmark" else settings.history_cap
+def _cap_for(flag: str, tier: str) -> int:
+    """Return the dev/prod-tiered page retention cap for a flag+tier
+    (config/params.yml). Only history is tier-split; bookmark_cap is flat."""
+    if flag == "bookmark":
+        return settings.bookmark_cap
+    return settings.history_cap(tier)
 
 
 def _default_heading_path(item: HistoryItem, flag: str) -> List[str]:
@@ -387,6 +402,28 @@ async def ingest_batch(
     }
     all_items = [item for sections in url_groups.values() for item in sections]
 
+    # For bookmarks, `_bookmark_embedding_text` folds folder/title/domain
+    # into the embedding input — but those live on `Page`, not
+    # `PageSection`, and `_upsert_pages` below overwrites them
+    # unconditionally. Captured here, before the upsert, so a folder move
+    # (bookmark's `content` is usually just its title and doesn't change
+    # when it's re-filed) can still be detected as a reason to re-embed,
+    # instead of silently leaving a stale embedding that was computed
+    # under the old folder.
+    existing_bookmark_fields_by_hash: Dict[str, Tuple] = {}
+    if flag == "bookmark":
+        url_hashes = {url: _hash_url(url) for url in url_groups}
+        existing_pages = await db.execute(
+            select(Page.url_hash, Page.folder, Page.title, Page.domain).where(
+                Page.user_id == int(user_id),
+                Page.flag == flag,
+                Page.url_hash.in_(url_hashes.values()),
+            )
+        )
+        existing_bookmark_fields_by_hash = {
+            row.url_hash: (row.folder, row.title, row.domain) for row in existing_pages
+        }
+
     page_id_by_url = await _upsert_pages(url_groups, user_id, flag, browser_uuid, db)
 
     section_keys = [
@@ -403,10 +440,19 @@ async def ingest_batch(
         (row.page_id, tuple(row.heading_path or [])): row.content for row in existing
     }
 
+    def _is_changed(item: HistoryItem, key: Tuple) -> bool:
+        if existing_content_by_key.get(key) != item.content:
+            return True
+        if flag == "bookmark":
+            old_fields = existing_bookmark_fields_by_hash.get(_hash_url(item.url))
+            # None means this URL has no prior Page row (brand new) — the
+            # content comparison above already caught that case.
+            if old_fields is not None:
+                return old_fields != (item.folder, item.title, item.domain)
+        return False
+
     changed_items = [
-        item
-        for item, key in zip(all_items, section_keys)
-        if existing_content_by_key.get(key) != item.content
+        item for item, key in zip(all_items, section_keys) if _is_changed(item, key)
     ]
 
     stmt = pg_insert(PageSection).values(
@@ -439,8 +485,9 @@ async def ingest_batch(
         (row.page_id, tuple(row.heading_path or [])): row.id for row in result
     }
 
+    tier = await _get_account_tier(user_id, db)
+
     if changed_items:
-        tier = await _get_account_tier(user_id, db)
         embed_inputs = await _build_embedding_inputs(changed_items, tier, flag)
         embeddings = EmbeddingsProvider.get_default_embeddings()
 
@@ -449,11 +496,32 @@ async def ingest_batch(
         # per-request token cap (see _MAX_TOKENS_PER_EMBED_REQUEST), which
         # otherwise fails every embedding in the batch at once.
         vectors: List[List[float]] = [None] * len(embed_inputs)
-        for batch_indices in _chunk_by_token_budget(embed_inputs):
+        batches, total_tokens = _chunk_by_token_budget(embed_inputs)
+        for batch_indices in batches:
             batch_inputs = [embed_inputs[i] for i in batch_indices]
             batch_vectors = await embeddings.aembed_documents(batch_inputs)
             for idx, vector in zip(batch_indices, batch_vectors):
                 vectors[idx] = vector
+
+        # Best-effort attribution: FallbackEmbeddings doesn't report back
+        # which provider actually served a call, so this records the
+        # configured primary — inexact only during a rare fallback event
+        # (independently visible via /status/logs?logger_name=provider),
+        # and every cost figure here is an estimate regardless.
+        try:
+            account_id = int(user_id)
+        except (TypeError, ValueError):
+            account_id = None
+        db.add(
+            LLMUsage(
+                use_case="embeddings",
+                provider=settings.embeddings_provider,
+                model=settings.embeddings_model,
+                input_tokens=total_tokens,
+                output_tokens=0,
+                sync_account_id=account_id,
+            )
+        )
 
         changed_keys = [
             (page_id_by_url[item.url], tuple(_default_heading_path(item, flag)))
@@ -470,7 +538,15 @@ async def ingest_batch(
             for section_id, vector in zip(changed_section_ids, vectors)
         )
 
-    await _trim_to_cap(user_id=user_id, flag=flag, db=db)
+    await _trim_to_cap(user_id=user_id, flag=flag, db=db, tier=tier)
+    # Drives the "last synced" timestamp on the linked-browsers list — only
+    # reached on a fully successful ingest, same as `_trim_to_cap` above, so
+    # a failed sync never advances it.
+    await db.execute(
+        update(User)
+        .where(User.browser_uuid == browser_uuid)
+        .values(last_synced_at=func.now())
+    )
     await db.commit()
 
     logger.info(
@@ -482,14 +558,16 @@ async def ingest_batch(
     )
 
 
-async def _trim_to_cap(user_id: str, flag: str, db: AsyncSession) -> None:
+async def _trim_to_cap(user_id: str, flag: str, db: AsyncSession, tier: str) -> None:
     """Evict this user's oldest-by-`visited_at` pages for `flag` beyond the cap.
 
     Deleting `Page` rows cascades to their `PageSection`/`SectionEmbedding`
     rows via `ondelete="CASCADE"`, so the vector index stays in sync for
     free. A 24-section page and a 1-section page each consume one cap slot.
+    `tier` is required (not defaulted to "free") so a caller can't silently
+    under-cap a pro account by forgetting to look it up.
     """
-    cap = _cap_for(flag)
+    cap = _cap_for(flag, tier)
     overflow = (
         select(Page.id)
         .where(Page.user_id == int(user_id), Page.flag == flag)

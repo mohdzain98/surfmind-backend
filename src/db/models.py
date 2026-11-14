@@ -223,6 +223,21 @@ class User(Base):
     sync_account_id: Mapped[int] = mapped_column(
         ForeignKey("sync_accounts.id", ondelete="CASCADE"), nullable=False
     )
+    # User-facing name ("Work Laptop") shown on the linked-browsers list and
+    # on cross-browser result attribution. Null until the user names it (or
+    # the client sends a computed default) — see
+    # `sync_service._normalize_device_name`.
+    device_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Set when this browser joins a sync account: code redemption, or
+    # account creation for the browser that generated the code.
+    linked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Updated at the end of every successful ingest (`ingestion.ingest_batch`)
+    # — drives the "last synced" timestamp on the linked-browsers list.
+    last_synced_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -274,6 +289,13 @@ class SearchHistory(Base):
     # searches have no recorded timing. Wall-clock elapsed time for /search
     # or the full /search-stream SSE stream, set by core_controller.py.
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # "standard" (default, backfills every pre-existing row — they really
+    # were all standard searches) or "fast". `fast_strictness` records
+    # which preset a fast search used, so re-running it from Recent
+    # Searches reuses the same setting rather than whatever's currently
+    # saved client-side.
+    mode: Mapped[str] = mapped_column(String, nullable=False, server_default="standard")
+    fast_strictness: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

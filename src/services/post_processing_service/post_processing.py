@@ -60,14 +60,23 @@ class PostProcessing:
             content = doc.page_content[:300].replace("\n", " ")
             title = doc.metadata.get("title", "")
             title = title.strip() if title and title.strip() else content
+            folder = doc.metadata.get("folder") or ""
 
             # Store mapping
             index_map[doc_number] = len(document_list)
 
-            # 🔥 Add source & title
+            # A folder can be the ONLY textual evidence tying a sparse
+            # bookmark (title/URL only, no real content) to its subject —
+            # e.g. a bookmark titled "AWS Setup Guide" filed under
+            # "Bookmarks bar / cellus" is clearly about cellus, but nothing
+            # in its title/content says so. Without this line the judge has
+            # no way to see that and drops a correct, folder-matched hit as
+            # irrelevant purely because it can't see why it was retrieved.
+            folder_line = f'Folder: "{folder}"\n' if folder else ""
             block = (
                 f"{doc_number}. "
                 f'Title: "{title}"\n'
+                f"{folder_line}"
                 f"Source: {source}\n"
                 f'Content: "{content}"'
             )

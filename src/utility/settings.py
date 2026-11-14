@@ -7,9 +7,10 @@ params from `config/params.dev.yml` or `config/params.prod.yml` (selected by
 files directly; import the module-level `settings` singleton instead.
 """
 
+import tomllib
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Literal
+from typing import Any, Dict, Literal, Optional
 
 import yaml
 from pydantic import AliasChoices, Field
@@ -18,6 +19,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Resolved directly (not via src.utility.path_finder.Finder) to avoid a
 # circular import: path_finder -> logger -> settings.
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
+
+# Read from pyproject.toml (the single source of truth for this) rather
+# than duplicating the number here — bump it in one place, this always
+# matches. Independent of DATA_SCHEMA_VERSION below: this is a general
+# release version, that's a narrow "may your cached data be stale" signal.
+with open(_BACKEND_ROOT / "pyproject.toml", "rb") as _f:
+    APP_VERSION: str = tomllib.load(_f)["project"]["version"]
 
 # Bump this ONLY when a backend change means previously-synced client data
 # could now be silently stale/missing from search — e.g. this value's
@@ -64,6 +72,32 @@ class Settings(BaseSettings):
     redis_port: int = Field(default=6379, validation_alias="REDIS_PORT")
     database_url: str = Field(default="", validation_alias="DATABASE_URL")
     admin_jwt_secret: str = Field(default="", validation_alias="ADMIN_JWT_SECRET")
+    # nginx runs as a separate process outside this app — its own log files
+    # on disk are the only source for them (unlike app_logs, which captures
+    # this app's own logging). Standard Debian/Ubuntu paths by default;
+    # overridable since prod/staging paths could differ.
+    nginx_error_log_path: str = Field(
+        default="/var/log/nginx/error.log", validation_alias="NGINX_ERROR_LOG_PATH"
+    )
+    nginx_access_log_path: str = Field(
+        default="/var/log/nginx/access.log", validation_alias="NGINX_ACCESS_LOG_PATH"
+    )
+    # Comma-separated systemd unit names to health-check (see `systemd_services`
+    # below). "surfmind" is this app's own unit name per the actual prod
+    # journalctl output seen this session — configurable since staging's
+    # differs ("surfmind-staging").
+    systemd_service_names: str = Field(
+        default="nginx,surfmind", validation_alias="SYSTEMD_SERVICE_NAMES"
+    )
+
+    @property
+    def systemd_services(self) -> list[str]:
+        """Parsed `systemd_service_names`, blank entries dropped."""
+        return [
+            name.strip()
+            for name in self.systemd_service_names.split(",")
+            if name.strip()
+        ]
 
     @property
     def _params(self) -> Dict[str, Any]:
@@ -83,14 +117,29 @@ class Settings(BaseSettings):
             node = node[key]
         return node["free"]
 
-    @property
-    def history_cap(self) -> int:
-        """Per-user history retention cap (ingestion.history_cap)."""
-        return self._params["ingestion"]["history_cap"]
+    def history_cap(self, tier: str) -> int:
+        """Per-user history retention cap, tier-split (ingestion.history_cap).
+
+        Free tier's cap (100) intentionally matches the extension's own
+        local retention window — keeping them aligned means the "N local /
+        M synced" sync-coverage comparison actually settles at equality
+        for a healthy free-tier account, instead of the backend
+        perpetually retaining more than the extension ever keeps locally.
+        """
+        return self._free_or_pro("ingestion", "history_cap", tier=tier)
+
+    def _free_or_pro(self, *path: str, tier: str) -> Any:
+        """Read a value nested under `<path>.free` or `<path>.pro`, by tier."""
+        node: Any = self._params
+        for key in path:
+            node = node[key]
+        return node.get(tier, node["free"])
 
     @property
     def bookmark_cap(self) -> int:
-        """Per-user bookmark retention cap (ingestion.bookmark_cap)."""
+        """Per-user bookmark retention cap (ingestion.bookmark_cap) — flat,
+        not tier-split; unlike history, there's no local-cap mismatch to
+        align with for bookmarks."""
         return self._params["ingestion"]["bookmark_cap"]
 
     @property
@@ -211,6 +260,40 @@ class Settings(BaseSettings):
     def category_limit(self, tier: str) -> int:
         """Max categories for `tier` (classification.category_limit.<tier>)."""
         return self._params["classification"]["category_limit"][tier]
+
+    @property
+    def fast_mode_default_preset(self) -> str:
+        """Fallback strictness preset name (fast_mode.default_preset)."""
+        return self._params["fast_mode"]["default_preset"]
+
+    @property
+    def fast_mode_relative_cutoff(self) -> float:
+        """Drop results below this fraction of the top result's similarity
+        (fast_mode.relative_cutoff), applied on top of each preset's floor."""
+        return self._params["fast_mode"]["relative_cutoff"]
+
+    @property
+    def fast_mode_max_results_cap(self) -> int:
+        """Hard ceiling on `max_results`, and how many candidates pgvector
+        is asked for before thresholding (fast_mode.max_results_cap)."""
+        return self._params["fast_mode"]["max_results_cap"]
+
+    @property
+    def fast_mode_preset_names(self) -> list[str]:
+        """Every configured strictness preset name (fast_mode.presets)."""
+        return list(self._params["fast_mode"]["presets"].keys())
+
+    def fast_mode_preset(self, name: Optional[str]) -> Dict[str, Any]:
+        """Resolve a strictness preset name to `{"threshold", "max_results"}`.
+
+        An unknown or missing name falls back to `fast_mode_default_preset`
+        rather than erroring — the client sends a name, never a raw number,
+        so presets can be retuned without breaking anyone's saved setting,
+        and a bad/stale name should never fail a search.
+        """
+        presets = self._params["fast_mode"]["presets"]
+        default_name = self.fast_mode_default_preset
+        return presets.get(name, presets[default_name])
 
 
 settings = Settings()

@@ -131,6 +131,22 @@ class SearchRequest(BaseModel):
     user_id: str = Field(validation_alias=AliasChoices("browser_uuid", "userId"))
     query: str
     flag: str
+    # Bookmark-only. A full folder path exactly as stored on `Page.folder`
+    # (e.g. "Bookmarks bar / Work"), matched as that folder AND everything
+    # nested under it — not a leaf-only exact match. Ignored for
+    # flag="history"; for flag="combined" it scopes only the bookmark leg.
+    folder: str | None = None
+    # "fast" skips post-processing/LLM entirely and returns ranked links
+    # straight from retrieval; anything else (including omitted, for old
+    # extension builds) behaves exactly as today. Loosely typed on purpose
+    # — `fast_strictness`/`max_results` are normalized in
+    # `fast_search.py`, never rejected with a 422 for a bad value.
+    mode: str = "standard"
+    fast_strictness: str | None = None  # only meaningful when mode == "fast"
+    # Any, not int | None — a strict int field 422s on garbage input (e.g.
+    # a non-numeric string) before fast_search.clamp_max_results ever gets
+    # a chance to fall back cleanly, breaking the "never error" contract.
+    max_results: Any = None  # only meaningful when mode == "fast"
 
 
 class SearchResponse(BaseModel):
@@ -164,6 +180,11 @@ class GenerateCodeRequest(BaseModel):
     browser_uuid: str = Field(
         validation_alias=AliasChoices("browser_uuid", "browserUuid")
     )
+    # Optional — names the generating browser (the first device in what may
+    # become a linked account). Omitted keeps whatever name it already has.
+    device_name: str | None = Field(
+        default=None, validation_alias=AliasChoices("device_name", "deviceName")
+    )
 
 
 class RedeemCodeRequest(BaseModel):
@@ -173,6 +194,10 @@ class RedeemCodeRequest(BaseModel):
         validation_alias=AliasChoices("browser_uuid", "browserUuid")
     )
     code: str
+    # Optional — names this browser as it joins the account.
+    device_name: str | None = Field(
+        default=None, validation_alias=AliasChoices("device_name", "deviceName")
+    )
 
 
 class UnlinkRequest(BaseModel):
@@ -180,6 +205,42 @@ class UnlinkRequest(BaseModel):
 
     browser_uuid: str = Field(
         validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )
+
+
+class DevicesRequest(BaseModel):
+    """Request schema for listing the requesting browser's linked devices."""
+
+    browser_uuid: str = Field(
+        validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )
+
+
+class RenameDeviceRequest(BaseModel):
+    """Request schema for renaming a browser in the requester's sync account.
+
+    `target_browser_uuid` may be any browser in that account, not only the
+    requester's own — the user may be fixing the name of a device they
+    aren't currently sitting at.
+    """
+
+    browser_uuid: str = Field(
+        validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )
+    target_browser_uuid: str = Field(
+        validation_alias=AliasChoices("target_browser_uuid", "targetBrowserUuid")
+    )
+    device_name: str = Field(validation_alias=AliasChoices("device_name", "deviceName"))
+
+
+class UnlinkDeviceRequest(BaseModel):
+    """Request schema for remotely unlinking another browser in the account."""
+
+    browser_uuid: str = Field(
+        validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )
+    target_browser_uuid: str = Field(
+        validation_alias=AliasChoices("target_browser_uuid", "targetBrowserUuid")
     )
 
 
