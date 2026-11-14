@@ -90,7 +90,7 @@ def health_check():
     """
     return {
         "status": "ok",
-        "message": "Surfmind FastAPI server running!",
+        "message": "Surfmind backend server running!",
         "version": APP_VERSION,
         "dataSchemaVersion": DATA_SCHEMA_VERSION,
     }
