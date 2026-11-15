@@ -11,7 +11,15 @@ from typing import Any, Dict, List
 
 import redis
 from dotenv import load_dotenv
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.background import BackgroundTask
@@ -28,7 +36,12 @@ from src.models.core import (
 )
 from src.services.core_service.main import CoreRetrieval, Retrieval
 from src.services.ingestion_service.ingestion import _default_heading_path, ingest_batch
-from src.services.privacy_service.privacy import clear_all_data, clear_history
+from src.services.privacy_service.privacy import (
+    HISTORY_CLEAR_RANGES,
+    clear_all_data,
+    clear_history,
+    resolve_history_clear_range,
+)
 from src.services.search_history_service.search_history import (
     get_recent_searches,
     persist_search,
@@ -351,7 +364,19 @@ async def search_stream(
 
     async def event_stream():
         try:
-            if payload.flag == "combined":
+            if payload.mode == "fast":
+                # Fast mode has its own pipeline (no post-processing/LLM)
+                # and its own final-event shape (`results`, not `docs`) —
+                # it already resolves device names itself, so it doesn't
+                # go through _annotate_source_browser below.
+                gen = service.stream_fast_search(
+                    data=payload,
+                    history=history_data,
+                    bookmarks=bookmark_data,
+                    user_id=str(sync_account_id),
+                    db=db,
+                )
+            elif payload.flag == "combined":
                 gen = service.stream_combined_rag(
                     data=payload,
                     history=history_data,
@@ -369,9 +394,10 @@ async def search_stream(
             async for event in gen:
                 if event.get("step") == "final":
                     data = event.get("data") or {}
-                    await _annotate_source_browser(
-                        data.get("docs") or [], payload.user_id, db
-                    )
+                    if payload.mode != "fast":
+                        await _annotate_source_browser(
+                            data.get("docs") or [], payload.user_id, db
+                        )
                     result_holder["data"] = data
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as exc:
@@ -384,8 +410,37 @@ async def search_stream(
 
     async def _persist_after_stream() -> None:
         data = result_holder.get("data")
-        if data and data.get("success"):
-            duration_ms = int((time.monotonic() - stream_start) * 1000)
+        if not data:
+            return
+        duration_ms = int((time.monotonic() - stream_start) * 1000)
+        # Total request time (stream start to final event) for every
+        # completed search-stream call, Fast or Standard — logged
+        # unconditionally, independent of whether it's persisted below, so
+        # a no_match/failed search still counts toward a real latency
+        # comparison between the two modes.
+        logger.info(
+            "search-stream duration: mode=%s flag=%s duration_ms=%d query=%r",
+            data.get("mode", "standard"),
+            payload.flag,
+            duration_ms,
+            payload.query,
+        )
+        if data.get("mode") == "fast":
+            # Mirrors Standard's "only persist a genuinely successful
+            # search" convention — a no_match fast search isn't worth
+            # saving to Recent Searches either.
+            if not data.get("no_match"):
+                await persist_search(
+                    user_id=str(sync_account_id),
+                    query=payload.query,
+                    flag=payload.flag,
+                    answer=None,
+                    sources=data.get("results", []),
+                    duration_ms=duration_ms,
+                    mode="fast",
+                    fast_strictness=data.get("fast_strictness"),
+                )
+        elif data.get("success"):
             await persist_search(
                 user_id=str(sync_account_id),
                 query=payload.query,
@@ -422,19 +477,41 @@ async def recent_searches_route(
 
 
 @router.delete("/user/history", response_model=Dict[str, Any])
-async def clear_history_route(browser_uuid: str, db: AsyncSession = Depends(get_db)):
+async def clear_history_route(
+    browser_uuid: str,
+    history_range: str = Query(default="24h", alias="range"),
+    db: AsyncSession = Depends(get_db),
+):
     """Delete this account's history pages/sections/embeddings and Redis
     cache. Bookmarks, search history, and account/sync setup are untouched.
     Scoped to `sync_account_id`, so a synced user's delete reaches every
     linked browser, not just the requesting one.
+
+    `range` (query param, e.g. `?range=7d`) is a named window — `"1h"`,
+    `"24h"` (default), `"7d"`, `"30d"`, or `"all"` — scoping the delete to
+    history visited within that window instead of all of it. `"all"` is
+    the full wipe (no cutoff at all), same as this endpoint's original
+    behavior before `range` existed. A missing/unrecognized value falls
+    back to the default rather than erroring, same convention as every
+    other named option in this API (Fast mode's `fast_strictness`,
+    bookmark `folder`). Only `Page.visited_at` is compared — a page last
+    visited outside the window keeps its full row even if it existed long
+    before that too.
     """
     try:
         sync_account_id = await resolve_sync_account_id(
             browser_uuid=browser_uuid, db=db
         )
-        await clear_history(sync_account_id=sync_account_id, db=db)
+        resolved_range = resolve_history_clear_range(history_range)
+        delta = HISTORY_CLEAR_RANGES[resolved_range]
+        cutoff = datetime.now(timezone.utc) - delta if delta is not None else None
+        await clear_history(sync_account_id=sync_account_id, db=db, since=cutoff)
+        # Clears the Redis cache unconditionally, same as before a range
+        # existed — the deleted rows are gone from Postgres regardless of
+        # range, so the next search must rebuild its corpus either way;
+        # partially invalidating the cache isn't worth the complexity.
         await asyncio.to_thread(redis_client.delete, f"user:{sync_account_id}:history")
-        return {"status": "history_cleared"}
+        return {"status": "history_cleared", "range": resolved_range}
     except redis.ConnectionError as e:
         logger.error(f"Failed to connect to Redis: {e}")
         raise HTTPException(

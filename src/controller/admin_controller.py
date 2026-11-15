@@ -373,7 +373,7 @@ async def search_metrics_route(
     db: AsyncSession = Depends(get_db),
     _admin: dict = Depends(get_current_admin),
 ):
-    """Search volume + latency, grouped by flag.
+    """Search volume + latency, grouped by flag and mode.
 
     `SearchHistory` (populated by `search_history_service.persist_search`
     after every successful `/search`/`/search-stream` call) already records
@@ -382,32 +382,56 @@ async def search_metrics_route(
     excluded from the avg/max, not counted as zero. Date range: explicit
     `since`/`until` (ISO 8601) takes precedence over `since_days` (default
     7 = last N days from now), same as `/status/llm-usage`.
+
+    Grouped by `mode` as well as `flag` (not just flag) so Fast mode's
+    actual latency and adoption are directly visible against Standard's,
+    rather than averaged together — the entire point of Fast mode is to be
+    faster, and that's unverifiable if the two get blended into one
+    number. `fastModeUsers`/`fastModeSearches`/`totalSearches` are
+    unpaginated, date-filtered totals — independent of `limit`/`offset` on
+    `metrics`, which exists for consistency with this route's other list
+    shapes even though there are only a handful of (flag, mode) pairs.
     """
+    filters = []
+    if since:
+        filters.append(SearchHistory.created_at >= since)
+    elif since_days:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
+        filters.append(SearchHistory.created_at >= cutoff)
+    if until:
+        filters.append(SearchHistory.created_at <= until)
+
     query = select(
         SearchHistory.flag,
+        SearchHistory.mode,
         func.count().label("total"),
         func.avg(SearchHistory.duration_ms).label("avg_duration_ms"),
         func.max(SearchHistory.duration_ms).label("max_duration_ms"),
-    )
-    if since:
-        query = query.where(SearchHistory.created_at >= since)
-    elif since_days:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
-        query = query.where(SearchHistory.created_at >= cutoff)
-    if until:
-        query = query.where(SearchHistory.created_at <= until)
+    ).where(*filters)
     query = (
-        query.group_by(SearchHistory.flag)
-        .order_by(SearchHistory.flag)
+        query.group_by(SearchHistory.flag, SearchHistory.mode)
+        .order_by(SearchHistory.flag, SearchHistory.mode)
         .limit(limit)
         .offset(offset)
     )
     result = await db.execute(query)
 
+    totals_result = await db.execute(
+        select(
+            func.count().label("total"),
+            func.count(func.distinct(SearchHistory.user_id))
+            .filter(SearchHistory.mode == "fast")
+            .label("fast_mode_users"),
+            func.count().filter(SearchHistory.mode == "fast").label("fast_searches"),
+        ).where(*filters)
+    )
+    totals = totals_result.one()
+
     return {
         "metrics": [
             {
                 "flag": row.flag,
+                "mode": row.mode,
                 "totalSearches": row.total,
                 "avgDurationMs": (
                     round(row.avg_duration_ms) if row.avg_duration_ms else None
@@ -415,7 +439,10 @@ async def search_metrics_route(
                 "maxDurationMs": row.max_duration_ms,
             }
             for row in result.all()
-        ]
+        ],
+        "totalSearches": totals.total,
+        "fastModeSearches": totals.fast_searches,
+        "fastModeUsers": totals.fast_mode_users,
     }
 
 
@@ -686,6 +713,10 @@ async def account_searches_route(
     `search_history_service.persist_search` on every new search, same as
     the page-count/bookmark caps. Not a bug in this route; the cap is
     enforced upstream, at write time.
+
+    `mode`/`fastStrictness` distinguish a Fast-mode row (`answer: null`,
+    `sources` holding Fast's result-list shape instead of Standard's
+    `docs` shape) from a Standard one.
     """
     account = await db.get(SyncAccount, sync_account_id)
     if account is None:
@@ -714,6 +745,8 @@ async def account_searches_route(
             "answer": row.answer,
             "sources": row.sources,
             "durationMs": row.duration_ms,
+            "mode": row.mode,
+            "fastStrictness": row.fast_strictness,
             "createdAt": row.created_at.isoformat(),
         }
         for row in result.scalars()

@@ -14,6 +14,15 @@ admin:
 search_history:
   retention_cap: 20
 
+fast_mode:
+  default_preset: balanced
+  relative_cutoff: 0.6
+  max_results_cap: 10
+  presets:
+    broad: { threshold: 0.4, max_results: 5 }
+    balanced: { threshold: 0.5, max_results: 5 }
+    precise: { threshold: 0.7, max_results: 5 }
+
 rag:
   provider: openai
   model:

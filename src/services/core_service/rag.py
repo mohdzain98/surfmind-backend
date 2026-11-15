@@ -231,6 +231,7 @@ class HybridRAGService:
         flag: str,
         db: AsyncSession,
         folder: Optional[str] = None,
+        k_override: Optional[int] = None,
     ) -> List[dict]:
         """Rank this user's `flag`-scoped pages by their single best-matching section.
 
@@ -251,6 +252,10 @@ class HybridRAGService:
         `" / %"` stops a filter of `"Bookmarks bar"` from also matching a
         sibling like `"Bookmarks bar 2"`). Skipped entirely when `folder`
         is falsy, so history/unfiltered bookmark search is unaffected.
+
+        `k_override` widens `LIMIT :k` beyond `self.vector_k` — Fast mode
+        thresholds candidates *after* retrieval, so it needs more of them
+        to filter from than Standard mode's small fused-ranking k.
         """
         query_vector = await self.embeddings.aembed_query(query)
         # Bound as a pgvector text literal + explicit cast — avoids needing
@@ -262,7 +267,7 @@ class HybridRAGService:
             "user_id": int(user_id),
             "flag": flag,
             "query_embedding": embedding_literal,
-            "k": self.vector_k,
+            "k": k_override or self.vector_k,
         }
         folder_clause = ""
         if folder:
@@ -338,6 +343,15 @@ class HybridRAGService:
                             "section_index": row.get("section_index"),
                             "page_type": row.get("page_type"),
                             "source_browser_uuid": row.get("source_browser_uuid"),
+                            # Cosine distance (lower = closer) — the one
+                            # signal with a stable, absolute scale, unlike
+                            # _map_to_parents' rank-fused score. Kept here
+                            # (not just on the raw row) so Fast mode's
+                            # threshold step can read it straight off the
+                            # parent Document it already has. Absent on a
+                            # BM25-only parent — not every parent passes
+                            # through this function.
+                            "vector_distance": row["distance"],
                         },
                     )
                 )
@@ -347,6 +361,7 @@ class HybridRAGService:
                 parents[pid].metadata["source_browser_uuid"] = row.get(
                     "source_browser_uuid"
                 )
+                parents[pid].metadata["vector_distance"] = row["distance"]
             hits_with_pid.append({**row, "parent_id": pid})
         return parents, hits_with_pid
 
@@ -358,6 +373,7 @@ class HybridRAGService:
         flag: str,
         db: AsyncSession,
         folder: Optional[str] = None,
+        k_override: Optional[int] = None,
     ) -> List[Document]:
         """
         Main hybrid retrieval entrypoint.
@@ -369,6 +385,9 @@ class HybridRAGService:
         already be pre-filtered by folder on the BM25/caller side (see
         `CoreRetrieval._build_parent_documents`), so this only needs to
         pass it through to the Postgres side.
+        `k_override` is passed straight through to `_run_pgvector` — see
+        its docstring (Fast mode thresholds after retrieval, so it wants
+        more candidates than Standard's small fused-ranking k).
         """
         # Step 1: build child docs (BM25 only — pgvector reads persisted rows)
         child_docs, parents = self._build_child_documents(parent_docs)
@@ -393,13 +412,23 @@ class HybridRAGService:
             bm25_hits, vector_rows = await asyncio.gather(
                 asyncio.to_thread(_run_bm25),
                 self._run_pgvector(
-                    query=query, user_id=user_id, flag=flag, db=db, folder=folder
+                    query=query,
+                    user_id=user_id,
+                    flag=flag,
+                    db=db,
+                    folder=folder,
+                    k_override=k_override,
                 ),
             )
         else:
             bm25_hits = []
             vector_rows = await self._run_pgvector(
-                query=query, user_id=user_id, flag=flag, db=db, folder=folder
+                query=query,
+                user_id=user_id,
+                flag=flag,
+                db=db,
+                folder=folder,
+                k_override=k_override,
             )
 
         # Step 4: extend parents with vector-only hits, then merge + map back

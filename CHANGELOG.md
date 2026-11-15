@@ -5,6 +5,63 @@ This backend didn't track changes before this file existed — the first
 entry covers everything landed in the initial Postgres migration commit,
 not a single day's work.
 
+## upcoming
+- sensitive data protection
+
+## 2026-11-14 — Fast mode, clear-history ranges, prod retrieval fixes
+
+### Added
+- **Fast mode**: `mode: "fast"` on `POST /v1/search-stream` — retrieval
+  only (BM25 + pgvector, same hybrid pipeline as Standard), no LLM calls
+  at all. Results are filtered by a named strictness preset
+  (`fast_strictness`: `"broad"`/`"balanced"`/`"precise"`, default
+  `"balanced"`) against a floor on embedding similarity instead of an LLM
+  judge — a result with no computed similarity (a BM25-only hit outside
+  pgvector's own top-k) is dropped rather than shown unverified.
+  `max_results` (clamped 1-10) and an unrecognized/missing preset name
+  both fall back cleanly, never a 422. New response shape
+  (`mode`/`results`/`no_match`/`fast_strictness`) over the existing SSE
+  envelope — no new endpoint. `search_history` gained `mode`/
+  `fast_strictness` columns so Recent Searches can tag and replay a fast
+  search with the same preset it used. Benchmarked at ~13.8x faster than
+  Standard on 15 real queries against real local data (~615ms vs
+  ~8,492ms average) — see `docs/task_and_plans/fast_mode_benchmark.md`.
+- `DELETE /v1/user/history` gained `?range=1h|24h|7d|30d|all` (default
+  `24h`, matching today's behavior) — scopes the delete to history
+  visited within that window via `Page.visited_at` instead of always
+  wiping everything. `"all"` is the original full-wipe behavior, now
+  reachable by name instead of only by omitting a cutoff entirely.
+- Admin: `/status/search-metrics` now groups by `mode` as well as `flag`,
+  with unpaginated `totalSearches`/`fastModeSearches`/`fastModeUsers`
+  totals — lets Fast mode's actual latency and adoption be read directly
+  instead of blended into one average. `/accounts/{id}/searches` now
+  also surfaces `mode`/`fastStrictness` per row (was missing them despite
+  the columns existing — see Fixed).
+- Every completed `/search-stream` call (either mode) logs one
+  `search-stream duration: mode=... flag=... duration_ms=...` line for a
+  quick latency comparison without waiting on `search_history` to
+  accumulate rows.
+- Version bumped to `1.81.0`.
+
+### Fixed
+- **Prod incident**: `/search`/`/search-stream` fully depended on the
+  Redis-cached corpus being non-empty before even attempting pgvector —
+  in a multi-browser account, each `/save-data` call wholesale-overwrites
+  the shared Redis cache key with just that browser's payload, so
+  whichever browser synced most recently "won" the cache slot and every
+  other linked browser's search silently lost pgvector access until it
+  resynced too (reported as "sync coverage says fully synced, but search
+  finds nothing"). `retrieve_parents` now always runs pgvector against
+  Postgres regardless of Redis state.
+- A bookmark moved to a new folder kept its *old* embedding indefinitely
+  — re-embed detection only compared `content`, never `folder`/`title`/
+  `domain`, even though sparse bookmarks embed exactly those fields.
+  Compounded by the relevance judge never being shown a result's folder
+  at all, so even a correctly folder-matched retrieval got rejected as
+  irrelevant. Both fixed: folder/title/domain changes now trigger a
+  re-embed, and the judge's prompt includes folder as valid identifying
+  evidence for a sparse bookmark.
+
 ## 2026-10-11 — Named linked browsers, bookmark folder search, tier-split retention, versioning
 
 ### Added

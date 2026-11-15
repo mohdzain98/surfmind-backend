@@ -10,10 +10,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import LLMUsage
 from src.models.core import Document, SearchRequest, SearchResponse
+from src.services.core_service.fast_search import (
+    apply_threshold,
+    clamp_max_results,
+    resolve_preset,
+    serialize_fast_result,
+)
 from src.services.core_service.rag import HybridRAGService, LLMRag
 from src.services.llm_service.llm_provider import LLMProvider
 from src.services.post_processing_service.post_processing import PostProcessing
+from src.services.sync_service.sync import get_device_names
 from src.utility.logger import AppLogger
+from src.utility.settings import settings
 
 logger = AppLogger.get_logger(__name__)
 
@@ -453,6 +461,87 @@ class CoreRetrieval:
             docs=validated_docs,
         )
         yield self._stream_event("final", res.model_dump())
+
+    async def stream_fast_search(
+        self,
+        data: SearchRequest,
+        history: List[dict],
+        bookmarks: List[dict],
+        user_id: str,
+        db: AsyncSession,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Stream Fast mode's progress/result via SSE — retrieval only.
+
+        No `PostProcessing`/`LLMRag` stages and no LLM calls at all,
+        unlike `stream_rag`/`stream_combined_rag` — results come straight
+        from `HybridRAGService.retrieve_parents`, filtered by the user's
+        strictness preset instead of an LLM judge. Reuses the same hybrid
+        retrieval (BM25 + pgvector, folder filters, per-page dedup) as
+        Standard mode; only what happens *after* retrieval differs. See
+        `docs/task_and_plans/fast_mode.md`.
+        """
+        preset_name, preset = resolve_preset(data.fast_strictness)
+        max_results = clamp_max_results(data.max_results, preset["max_results"])
+        retrieve_k = settings.fast_mode_max_results_cap
+
+        async def _retrieve_flag(
+            items: List[dict], flag: str, folder: Optional[str] = None
+        ) -> List[Tuple[Document, float]]:
+            docs = self._build_parent_documents(history=items, flag=flag, folder=folder)
+            parents = await self.rag.retrieve_parents(
+                query=data.query,
+                parent_docs=docs,
+                user_id=user_id,
+                flag=flag,
+                db=db,
+                folder=folder,
+                k_override=retrieve_k,
+            )
+            return apply_threshold(parents, preset)
+
+        retrieval_start = time.monotonic()
+        if data.flag == "combined":
+            # Thresholded independently per flag, same reasoning as
+            # stream_combined_rag's separate post-processing passes — a
+            # weak bookmark corpus shouldn't be crowded out by a stronger
+            # history one before each gets its own fair floor.
+            history_scored = await _retrieve_flag(history, flag="history")
+            bookmark_scored = await _retrieve_flag(
+                bookmarks, flag="bookmark", folder=data.folder
+            )
+            scored = history_scored[:max_results] + bookmark_scored[:max_results]
+        else:
+            folder = data.folder if data.flag == "bookmark" else None
+            scored = (await _retrieve_flag(history, flag=data.flag, folder=folder))[
+                :max_results
+            ]
+        retrieval_ms = int((time.monotonic() - retrieval_start) * 1000)
+        logger.print(
+            "fast search retrieval",
+            {"retrieval_ms": retrieval_ms, "candidates_kept": len(scored)},
+        )
+
+        yield self._stream_event("retrieved_parents", {"count": len(scored)})
+
+        other_browser_uuids = {
+            doc.metadata.get("source_browser_uuid")
+            for doc, _ in scored
+            if doc.metadata.get("source_browser_uuid")
+            and doc.metadata.get("source_browser_uuid") != data.user_id
+        }
+        device_names = await get_device_names(list(other_browser_uuids), db)
+
+        results = [
+            serialize_fast_result(doc, similarity, data.user_id, device_names)
+            for doc, similarity in scored
+        ]
+        final_payload = {
+            "mode": "fast",
+            "results": results,
+            "no_match": len(results) == 0,
+            "fast_strictness": preset_name,
+        }
+        yield self._stream_event("final", final_payload)
 
     def mock_stream_rag(
         self,
