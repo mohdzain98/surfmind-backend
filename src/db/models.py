@@ -204,6 +204,12 @@ class SyncAccount(Base):
     categorization_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+    # Stamped on every *full* (re)classification pass — the Settings-open
+    # "classify whatever's unclassified" pass does NOT touch this, only a
+    # reclassify_all run does. Drives the frontend's refresh-button cooldown.
+    last_classified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

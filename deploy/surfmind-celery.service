@@ -1,0 +1,15 @@
+[Unit]
+Description=SurfMind Celery worker (background page classification)
+After=network.target redis.service
+
+[Service]
+Type=simple
+User=zain
+WorkingDirectory=/home/zain/surfmind/surfmind-backend
+EnvironmentFile=/home/zain/surfmind/surfmind-backend/.env
+ExecStart=/home/zain/surfmind/surfmind-backend/senv/bin/celery -A src.celery_app worker --loglevel=info
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

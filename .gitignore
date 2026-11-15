@@ -13,3 +13,4 @@ docs/analysis
 data
 config/params.dev.yml
 load_tests/
+dump.rdb

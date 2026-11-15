@@ -26,17 +26,23 @@ from src.models.core import (
     CreateCategoryRequest,
     DisableCategorizationRequest,
     EnableCategorizationRequest,
+    RefreshCategorizationRequest,
     SearchAnalyticsRequest,
+    UpdateCategoryRequest,
 )
 from src.services.category_service.category import (
+    count_categories,
     create_category,
     delete_category,
     disable_categorization,
     enable_categorization,
+    get_refresh_available_at,
     get_search_category_analytics,
     is_categorization_enabled,
     list_categories,
     list_categorized_pages,
+    refresh_categorization,
+    update_category_description,
 )
 from src.services.classification_service.tasks import (
     classify_pages_task,
@@ -44,6 +50,7 @@ from src.services.classification_service.tasks import (
 )
 from src.services.sync_service.sync import resolve_sync_account_id
 from src.utility.logger import AppLogger
+from src.utility.settings import settings
 
 logger = AppLogger.get_logger(__name__)
 
@@ -68,7 +75,20 @@ async def list_categories_route(
     )
     enabled = await is_categorization_enabled(sync_account_id, db)
     categories = await list_categories(sync_account_id, db)
-    return {"enabled": enabled, "categories": categories}
+    refresh_available_at = await get_refresh_available_at(sync_account_id, db)
+    tier = await _get_tier(sync_account_id, db)
+    category_count = await count_categories(sync_account_id, db)
+    category_limit = settings.category_limit(tier)
+    return {
+        "enabled": enabled,
+        "categories": categories,
+        "refresh_available_at": (
+            refresh_available_at.isoformat() if refresh_available_at else None
+        ),
+        "category_count": category_count,
+        "category_limit": category_limit,
+        "can_create_category": category_count < category_limit,
+    }
 
 
 @router.post("/pages", response_model=Dict[str, Any])
@@ -122,15 +142,41 @@ async def create_category_route(
     }
 
 
+@router.post("/{category_id}/update", response_model=Dict[str, Any])
+async def update_category_route(
+    category_id: int,
+    payload: UpdateCategoryRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Edit a category's description. Name is fixed — only description is
+    editable (works for default categories too, except "Other")."""
+    sync_account_id = await resolve_sync_account_id(
+        browser_uuid=payload.browser_uuid, db=db
+    )
+    try:
+        category = await update_category_description(
+            category_id, sync_account_id, payload.description, db
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {
+        "id": category.id,
+        "name": category.name,
+        "description": category.description,
+    }
+
+
 @router.delete("/{category_id}", response_model=Dict[str, Any])
 async def delete_category_route(
     category_id: int, browser_uuid: str, db: AsyncSession = Depends(get_db)
 ):
-    """Delete a category (default or custom, no special-casing). Affected
-    pages are uncategorized automatically via ON DELETE SET NULL, not
-    deleted."""
+    """Delete a category (default or custom, no special-casing — except
+    "Other", which is never deletable)."""
     sync_account_id = await resolve_sync_account_id(browser_uuid=browser_uuid, db=db)
-    await delete_category(category_id, sync_account_id, db)
+    try:
+        await delete_category(category_id, sync_account_id, db)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     return {"success": True}
 
 
@@ -190,3 +236,33 @@ async def classify_route(payload: ClassifyRequest, db: AsyncSession = Depends(ge
 async def classify_status_route(payload: ClassifyStatusRequest):
     result = celery_app.AsyncResult(payload.task_id)
     return {"status": result.status, "ready": result.ready()}
+
+
+@router.post("/refresh", response_model=Dict[str, Any])
+async def refresh_route(
+    payload: RefreshCategorizationRequest, db: AsyncSession = Depends(get_db)
+):
+    """Manual full-reclassify, gated by a once-per-cooldown-window limit
+    enforced here (not just on the frontend) so the button can't be
+    bypassed by reloading, clearing local storage, or calling the API
+    directly."""
+    sync_account_id = await resolve_sync_account_id(
+        browser_uuid=payload.browser_uuid, db=db
+    )
+    if not await is_categorization_enabled(sync_account_id, db):
+        return {"status": "not_enabled"}
+
+    refresh_available_at = await get_refresh_available_at(sync_account_id, db)
+    if refresh_available_at is not None:
+        return {
+            "status": "cooldown",
+            "refresh_available_at": refresh_available_at.isoformat(),
+        }
+
+    next_available_at = await refresh_categorization(sync_account_id, db)
+    task = classify_pages_task.delay(str(sync_account_id), reclassify_all=True)
+    return {
+        "status": "queued",
+        "task_id": task.id,
+        "refresh_available_at": next_available_at.isoformat(),
+    }

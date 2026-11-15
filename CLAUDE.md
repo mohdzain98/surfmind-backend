@@ -221,3 +221,6 @@ head`, and restart the systemd unit (`surfmind.service` prod,
 allowlist and `client_max_body_size` (raised from nginx's 1MB default —
 a large sync payload can exceed it) — both are nginx config, not
 something this app controls.
+
+## commit and push
+- Do not commit on every change, only commit when asked.

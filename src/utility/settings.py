@@ -262,6 +262,12 @@ class Settings(BaseSettings):
         return self._params["classification"]["category_limit"][tier]
 
     @property
+    def classification_refresh_cooldown_hours(self) -> int:
+        """Minimum hours between manual full-reclassify runs
+        (classification.refresh_cooldown_hours)."""
+        return self._params["classification"]["refresh_cooldown_hours"]
+
+    @property
     def fast_mode_default_preset(self) -> str:
         """Fallback strictness preset name (fast_mode.default_preset)."""
         return self._params["fast_mode"]["default_preset"]

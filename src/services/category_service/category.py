@@ -8,6 +8,8 @@ here (except `enable_categorization` itself) assumes the caller has
 already checked `is_categorization_enabled`.
 """
 
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +41,21 @@ DEFAULT_CATEGORIES = [
     },
 ]
 
+# Seeded alongside DEFAULT_CATEGORIES, but tracked separately — it's a
+# structural fallback bucket, not one of the user's real category slots.
+# Jev's `Choice` primitive (classification_service/classify.py) can't
+# return "no match": it's structurally forced to pick one of whatever
+# criteria it's given. Giving it this as a literal 5th option lets a page
+# that doesn't fit any real category land honestly in "Other" instead of
+# being jammed into the real category Jev deems least-bad. Excluded from
+# count_categories' cap check (see below) — a free-tier account still
+# gets its full 4 real categories, "Other" doesn't eat one of them.
+OTHER_CATEGORY_NAME = "Other"
+OTHER_CATEGORY = {
+    "name": OTHER_CATEGORY_NAME,
+    "description": "Doesn't clearly fit any of this account's other categories",
+}
+
 
 async def is_categorization_enabled(sync_account_id: int, db: AsyncSession) -> bool:
     result = await db.execute(
@@ -51,7 +68,9 @@ async def is_categorization_enabled(sync_account_id: int, db: AsyncSession) -> b
 
 async def _create_default_categories(sync_account_id: int, db: AsyncSession) -> None:
     """Idempotent — re-enabling after a disable must not duplicate or error
-    on categories that already exist from a prior enable."""
+    on categories that already exist from a prior enable. Seeds "Other"
+    alongside the real defaults so it's always available as a
+    classification target from the very first enable."""
     stmt = pg_insert(Category).values(
         [
             {
@@ -60,7 +79,7 @@ async def _create_default_categories(sync_account_id: int, db: AsyncSession) -> 
                 "description": cat["description"],
                 "is_default": True,
             }
-            for cat in DEFAULT_CATEGORIES
+            for cat in [*DEFAULT_CATEGORIES, OTHER_CATEGORY]
         ]
     )
     stmt = stmt.on_conflict_do_nothing(constraint="uq_categories_user_name")
@@ -96,9 +115,58 @@ async def disable_categorization(sync_account_id: int, db: AsyncSession) -> None
     await db.commit()
 
 
-async def list_categories(sync_account_id: int, db: AsyncSession) -> list[dict]:
+async def get_refresh_available_at(
+    sync_account_id: int, db: AsyncSession
+) -> datetime | None:
+    """When this account's refresh button becomes available again.
+
+    `None` means it's available right now (never run, or cooldown already
+    elapsed) — the frontend can render the button enabled with no timer.
+    """
     result = await db.execute(
-        select(Category).where(Category.user_id == sync_account_id)
+        select(SyncAccount.last_classified_at).where(SyncAccount.id == sync_account_id)
+    )
+    last_classified_at = result.scalar_one_or_none()
+    if last_classified_at is None:
+        return None
+
+    available_at = last_classified_at + timedelta(
+        hours=settings.classification_refresh_cooldown_hours
+    )
+    if available_at <= datetime.now(timezone.utc):
+        return None
+    return available_at
+
+
+async def refresh_categorization(
+    sync_account_id: int, db: AsyncSession
+) -> datetime | None:
+    """Stamp `last_classified_at` to start a fresh cooldown window.
+
+    Caller (the /refresh route) has already confirmed via
+    `get_refresh_available_at` that the cooldown has elapsed — this just
+    records the attempt, same "stamp at trigger time, not completion time"
+    convention as everywhere else a Celery task gets queued from here.
+    Returns the next `refresh_available_at` for the response.
+    """
+    now = datetime.now(timezone.utc)
+    await db.execute(
+        SyncAccount.__table__.update()
+        .where(SyncAccount.id == sync_account_id)
+        .values(last_classified_at=now)
+    )
+    await db.commit()
+    return now + timedelta(hours=settings.classification_refresh_cooldown_hours)
+
+
+async def list_categories(sync_account_id: int, db: AsyncSession) -> list[dict]:
+    """ "Other" is always sorted last — it's the structural fallback bucket,
+    not a category the user actively chose, so it shouldn't compete with
+    real categories for position in the UI."""
+    result = await db.execute(
+        select(Category)
+        .where(Category.user_id == sync_account_id)
+        .order_by(Category.name == OTHER_CATEGORY_NAME, Category.id)
     )
     return [
         {
@@ -106,16 +174,26 @@ async def list_categories(sync_account_id: int, db: AsyncSession) -> list[dict]:
             "name": cat.name,
             "description": cat.description,
             "is_default": cat.is_default,
+            "deletable": cat.name != OTHER_CATEGORY_NAME,
         }
         for cat in result.scalars()
     ]
 
 
 async def count_categories(sync_account_id: int, db: AsyncSession) -> int:
+    """Count this account's categories toward its tier's cap.
+
+    Excludes "Other" — it's a structural fallback bucket seeded for
+    every account, not one of the account's real category slots, so it
+    must not eat into a free-tier account's 4-category allowance.
+    """
     result = await db.execute(
         select(func.count())
         .select_from(Category)
-        .where(Category.user_id == sync_account_id)
+        .where(
+            Category.user_id == sync_account_id,
+            Category.name != OTHER_CATEGORY_NAME,
+        )
     )
     return result.scalar_one()
 
@@ -142,13 +220,60 @@ async def delete_category(
     """No special-casing for `is_default` — defaults are deletable too.
     `pages.category_id`'s `ON DELETE SET NULL` uncategorizes affected pages
     automatically; nothing else to clean up here.
+
+    "Other" is the one exception — it's a structural fallback bucket
+    Jev needs to always have available (see OTHER_CATEGORY above), not a
+    real user category, so deleting it is rejected here regardless of
+    what the frontend does. Raises ValueError, same as create_category's
+    cap check, for the route to turn into a 400.
     """
+    result = await db.execute(
+        select(Category.name).where(
+            Category.id == category_id, Category.user_id == sync_account_id
+        )
+    )
+    name = result.scalar_one_or_none()
+    if name is None:
+        return
+    if name == OTHER_CATEGORY_NAME:
+        raise ValueError('The "Other" category cannot be deleted')
+
     await db.execute(
         delete(Category).where(
             Category.id == category_id, Category.user_id == sync_account_id
         )
     )
     await db.commit()
+
+
+async def update_category_description(
+    category_id: int, sync_account_id: int, description: str, db: AsyncSession
+) -> Category:
+    """Edit a category's description — the only field edit covers. `name`
+    is never editable: it's the account-unique identity classification
+    actually matches against (`classify_pages_async`'s `name_to_id`), not
+    just a label, so changing it would silently detach it from whatever
+    Jev was told last run. Works for default categories too (Work,
+    Shopping, etc.) — only "Other" is excluded, same as delete, since its
+    description is tied to its structural fallback meaning.
+
+    Raises ValueError (404-equivalent, no such category on this account)
+    or (for "Other") the same not-editable error delete_category raises.
+    """
+    result = await db.execute(
+        select(Category).where(
+            Category.id == category_id, Category.user_id == sync_account_id
+        )
+    )
+    category = result.scalar_one_or_none()
+    if category is None:
+        raise ValueError("Category not found")
+    if category.name == OTHER_CATEGORY_NAME:
+        raise ValueError('The "Other" category cannot be edited')
+
+    category.description = description
+    await db.commit()
+    return category
 
 
 async def list_categorized_pages(sync_account_id: int, db: AsyncSession) -> dict:

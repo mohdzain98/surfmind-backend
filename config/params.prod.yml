@@ -62,6 +62,7 @@ classification:
   category_limit:
     free: 4
     pro: 20
+  refresh_cooldown_hours: 24
   jev_model: jev-latest
   fallback:
     provider: gemini

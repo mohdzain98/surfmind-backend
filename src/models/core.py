@@ -346,6 +346,24 @@ class ClassifyRequest(BaseModel):
     reclassify_all: bool = False
 
 
+class UpdateCategoryRequest(BaseModel):
+    """Request schema for editing a category's description. `name` is
+    intentionally not here — see update_category_description."""
+
+    browser_uuid: str = Field(
+        validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )
+    description: str
+
+
+class RefreshCategorizationRequest(BaseModel):
+    """Request schema for the manual "refresh" (full reclassify) button."""
+
+    browser_uuid: str = Field(
+        validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )
+
+
 class ClassifyStatusRequest(BaseModel):
     """Request schema for polling a classification task's status.
 
