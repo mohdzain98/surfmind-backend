@@ -21,6 +21,8 @@ class ClassificationResult(TypedDict):
     category_name: str | None
     confidence: float | None
     provider: str
+    input_tokens: int
+    output_tokens: int
 
 
 class PageClassifier:
@@ -41,24 +43,32 @@ class PageClassifier:
         criteria = {cat["name"]: cat["description"] for cat in categories}
 
         try:
-            choice, confidence = await self._classify_via_jev(page_content, criteria)
+            choice, confidence, input_tokens, output_tokens = (
+                await self._classify_via_jev(page_content, criteria)
+            )
             return {
                 "category_name": choice,
                 "confidence": confidence,
                 "provider": "jev",
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
             }
         except Exception as exc:
             logger.warning("Jev classification failed, falling back to Gemini: %s", exc)
-            choice = await self._classify_via_gemini(page_content, criteria)
+            choice, input_tokens, output_tokens = await self._classify_via_gemini(
+                page_content, criteria
+            )
             return {
                 "category_name": choice,
                 "confidence": None,
                 "provider": "gemini_fallback",
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
             }
 
     async def _classify_via_jev(
         self, page_content: str, criteria: dict[str, str]
-    ) -> tuple[str, float | None]:
+    ) -> tuple[str, float | None, int, int]:
         async with AsyncTypeSafeClient() as client:
             response = await client.system_one(
                 state=page_content,
@@ -74,11 +84,19 @@ class PageClassifier:
                 },
             )
         answer = response.answers["category"]
-        return answer.choice, answer.confidence
+        # `response.usage.*_tokens` is `None` when the API didn't report it
+        # for this call — treated as 0 (unknown, not "free") same as every
+        # other best-effort usage dict in this codebase.
+        return (
+            answer.choice,
+            answer.confidence,
+            response.usage.input_tokens or 0,
+            response.usage.output_tokens or 0,
+        )
 
     async def _classify_via_gemini(
         self, page_content: str, criteria: dict[str, str]
-    ) -> str | None:
+    ) -> tuple[str | None, int, int]:
         """Prompt-based fallback — not structurally constrained like Jev, so
         the caller must validate the returned name is one of `criteria`'s
         keys; an unrecognized name is treated as unclassified, not a valid
@@ -96,4 +114,9 @@ class PageClassifier:
         llm = self.llm_provider.get_classification_fallback_llm()
         response = await llm.ainvoke(prompt)
         choice = response.content.strip()
-        return choice if choice in criteria else None
+        usage = getattr(response, "usage_metadata", None) or {}
+        return (
+            choice if choice in criteria else None,
+            usage.get("input_tokens", 0),
+            usage.get("output_tokens", 0),
+        )

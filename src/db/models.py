@@ -210,6 +210,12 @@ class SyncAccount(Base):
     last_classified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Total number of manual full-reclassify ("refresh") runs this account
+    # has triggered, lifetime. `last_classified_at` alone only tells you
+    # the *last* time — this is the admin-facing adoption count.
+    refresh_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

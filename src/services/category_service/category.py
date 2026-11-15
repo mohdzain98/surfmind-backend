@@ -141,7 +141,8 @@ async def get_refresh_available_at(
 async def refresh_categorization(
     sync_account_id: int, db: AsyncSession
 ) -> datetime | None:
-    """Stamp `last_classified_at` to start a fresh cooldown window.
+    """Stamp `last_classified_at` and bump `refresh_count`, to start a
+    fresh cooldown window and track lifetime refresh adoption for admin.
 
     Caller (the /refresh route) has already confirmed via
     `get_refresh_available_at` that the cooldown has elapsed — this just
@@ -153,7 +154,7 @@ async def refresh_categorization(
     await db.execute(
         SyncAccount.__table__.update()
         .where(SyncAccount.id == sync_account_id)
-        .values(last_classified_at=now)
+        .values(last_classified_at=now, refresh_count=SyncAccount.refresh_count + 1)
     )
     await db.commit()
     return now + timedelta(hours=settings.classification_refresh_cooldown_hours)
@@ -177,6 +178,39 @@ async def list_categories(sync_account_id: int, db: AsyncSession) -> list[dict]:
             "deletable": cat.name != OTHER_CATEGORY_NAME,
         }
         for cat in result.scalars()
+    ]
+
+
+async def get_category_usage(sync_account_id: int, db: AsyncSession) -> list[dict]:
+    """This account's categories with how many pages are actually filed
+    under each — the admin-facing "what categories is this user using"
+    view (list_categories alone has no page counts). Outer-joined so an
+    unused category still shows up with page_count 0 rather than being
+    silently omitted.
+    """
+    result = await db.execute(
+        select(
+            Category.id,
+            Category.name,
+            Category.is_default,
+            func.count(Page.id).label("page_count"),
+        )
+        .outerjoin(
+            Page,
+            (Page.category_id == Category.id) & (Page.user_id == sync_account_id),
+        )
+        .where(Category.user_id == sync_account_id)
+        .group_by(Category.id, Category.name, Category.is_default)
+        .order_by(Category.name == OTHER_CATEGORY_NAME, Category.id)
+    )
+    return [
+        {
+            "id": row.id,
+            "name": row.name,
+            "is_default": row.is_default,
+            "page_count": row.page_count,
+        }
+        for row in result
     ]
 
 

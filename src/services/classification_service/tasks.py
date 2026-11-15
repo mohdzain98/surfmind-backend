@@ -15,12 +15,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.celery_app import celery_app
-from src.db.models import Page, PageSection
+from src.db.models import LLMUsage, Page, PageSection
 from src.db.session import async_session_factory, engine
 from src.services.category_service.category import list_categories
 from src.services.classification_service.classify import PageClassifier
 from src.services.llm_service.llm_provider import LLMProvider
 from src.utility.logger import AppLogger
+from src.utility.settings import settings
 
 logger = AppLogger.get_logger(__name__)
 
@@ -120,6 +121,20 @@ async def classify_pages_async(user_id: str, reclassify_all: bool = False) -> di
                 target["page_id"],
                 result["provider"],
                 result["category_name"],
+            )
+            db.add(
+                LLMUsage(
+                    use_case="classification",
+                    provider=result["provider"],
+                    model=(
+                        settings.classification_jev_model
+                        if result["provider"] == "jev"
+                        else settings.classification_fallback_model
+                    ),
+                    input_tokens=result["input_tokens"],
+                    output_tokens=result["output_tokens"],
+                    sync_account_id=sync_account_id,
+                )
             )
             if result["category_name"] not in valid_names:
                 continue

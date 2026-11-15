@@ -1,10 +1,11 @@
 """Per-model $ pricing for cost estimation in the admin API.
 
 Manually maintained — no live pricing API exists. Source: OpenAI
-(developers.openai.com/api/docs/pricing) and Google
-(ai.google.dev/gemini-api/docs/pricing), checked 2026-09-20. A stale entry
-just means the estimate drifts from reality, not that anything breaks —
-update the table when a provider changes prices.
+(developers.openai.com/api/docs/pricing), Google
+(ai.google.dev/gemini-api/docs/pricing), checked 2026-09-20, and TypeSafe
+(jevtypesafeai.com/pricing), checked 2026-11-15. A stale entry just means
+the estimate drifts from reality, not that anything breaks — update the
+table when a provider changes prices.
 """
 
 from typing import Optional
@@ -20,6 +21,11 @@ PRICING_PER_MILLION_TOKENS: dict[tuple[str, str], dict[str, float]] = {
     # superseded) — using gemini-embedding-2's rate as the closest known
     # approximation, not an exact figure for this specific model.
     ("gemini", "gemini-embedding-001"): {"input": 0.20, "output": 0.0},
+    # TypeSafe's prepaid packs get cheaper at higher volume ($5-$20 packs:
+    # $0.42/M, down to $0.15/M on the $1,000 enterprise pack) — using the
+    # entry-level $0.42/M rate as a conservative (upper-bound) estimate
+    # since actual pack/volume isn't tracked here. Output tokens are free.
+    ("jev", "jev-latest"): {"input": 0.42, "output": 0.0},
 }
 
 

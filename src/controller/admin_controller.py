@@ -41,6 +41,7 @@ from src.services.admin_service.admin import (
     decode_token,
     verify_admin,
 )
+from src.services.category_service.category import get_category_usage
 from src.services.privacy_service.privacy import clear_all_data, clear_history
 from src.services.sync_service.sync import (
     AccountStillLinked,
@@ -233,6 +234,13 @@ async def stats_route(
         )
     ).scalar_one()
 
+    # Lifetime total of manual full-reclassify ("refresh") runs across
+    # every account — adoption of that specific button, not just the
+    # feature as a whole.
+    categorization_refresh_count = (
+        await db.execute(select(func.coalesce(func.sum(SyncAccount.refresh_count), 0)))
+    ).scalar_one()
+
     return {
         "total_accounts": total_accounts,
         "linked_accounts": linked_accounts,
@@ -242,6 +250,7 @@ async def stats_route(
         # only for now (see classification_service.tasks), so this counts
         # adoption of the feature as a whole, not a per-flag split.
         "categorization_enabled_accounts": categorization_enabled_accounts,
+        "categorization_refresh_count": categorization_refresh_count,
     }
 
 
@@ -692,6 +701,10 @@ async def account_detail_route(
         )
     ).scalar_one()
 
+    # Empty list for an account that's never enabled categorization — same
+    # harmless-empty convention as list_categories itself.
+    categories = await get_category_usage(sync_account_id, db)
+
     return {
         "syncAccountId": sync_account_id,
         "tier": account.tier,
@@ -703,6 +716,9 @@ async def account_detail_route(
         "llmInputTokens": input_tokens,
         "llmOutputTokens": output_tokens,
         "searchCount": search_count,
+        "categorizationEnabled": account.categorization_enabled,
+        "categorizationRefreshCount": account.refresh_count,
+        "categories": categories,
     }
 
 
