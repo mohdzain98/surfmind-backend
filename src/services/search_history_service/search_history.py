@@ -23,14 +23,18 @@ async def persist_search(
     user_id: str,
     query: str,
     flag: str,
-    answer: str,
+    answer: Optional[str],
     sources: List[dict],
     duration_ms: Optional[int] = None,
+    mode: str = "standard",
+    fast_strictness: Optional[str] = None,
 ) -> None:
     """Store a completed search and trim to the configured retention cap.
 
-    Swallows and logs any failure — recent-searches storage is a
-    nice-to-have, never worth failing or retrying a search over.
+    `answer` is `None` for a fast search — there's no LLM-written text, only
+    `sources` (the ranked result list). Swallows and logs any failure —
+    recent-searches storage is a nice-to-have, never worth failing or
+    retrying a search over.
     """
     try:
         async with async_session_factory() as db:
@@ -42,6 +46,8 @@ async def persist_search(
                     answer=answer,
                     sources=sources,
                     duration_ms=duration_ms,
+                    mode=mode,
+                    fast_strictness=fast_strictness,
                 )
             )
             await db.flush()
@@ -82,6 +88,8 @@ async def get_recent_searches(
             "flag": row.flag,
             "answer": row.answer,
             "sources": row.sources,
+            "mode": row.mode,
+            "fast_strictness": row.fast_strictness,
             "created_at": row.created_at.isoformat(),
         }
         for row in result.scalars()

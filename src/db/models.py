@@ -248,6 +248,13 @@ class SearchHistory(Base):
     # searches have no recorded timing. Wall-clock elapsed time for /search
     # or the full /search-stream SSE stream, set by core_controller.py.
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # "standard" (default, backfills every pre-existing row — they really
+    # were all standard searches) or "fast". `fast_strictness` records
+    # which preset a fast search used, so re-running it from Recent
+    # Searches reuses the same setting rather than whatever's currently
+    # saved client-side.
+    mode: Mapped[str] = mapped_column(String, nullable=False, server_default="standard")
+    fast_strictness: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

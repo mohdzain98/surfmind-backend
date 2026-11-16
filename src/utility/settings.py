@@ -10,7 +10,7 @@ files directly; import the module-level `settings` singleton instead.
 import tomllib
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Literal
+from typing import Any, Dict, Literal, Optional
 
 import yaml
 from pydantic import AliasChoices, Field
@@ -241,6 +241,40 @@ class Settings(BaseSettings):
     def embeddings_fallback_model(self) -> str:
         """Fallback embeddings model (embeddings.fallback.model) — not tier-split."""
         return self._params["embeddings"]["fallback"]["model"]
+
+    @property
+    def fast_mode_default_preset(self) -> str:
+        """Fallback strictness preset name (fast_mode.default_preset)."""
+        return self._params["fast_mode"]["default_preset"]
+
+    @property
+    def fast_mode_relative_cutoff(self) -> float:
+        """Drop results below this fraction of the top result's similarity
+        (fast_mode.relative_cutoff), applied on top of each preset's floor."""
+        return self._params["fast_mode"]["relative_cutoff"]
+
+    @property
+    def fast_mode_max_results_cap(self) -> int:
+        """Hard ceiling on `max_results`, and how many candidates pgvector
+        is asked for before thresholding (fast_mode.max_results_cap)."""
+        return self._params["fast_mode"]["max_results_cap"]
+
+    @property
+    def fast_mode_preset_names(self) -> list[str]:
+        """Every configured strictness preset name (fast_mode.presets)."""
+        return list(self._params["fast_mode"]["presets"].keys())
+
+    def fast_mode_preset(self, name: Optional[str]) -> Dict[str, Any]:
+        """Resolve a strictness preset name to `{"threshold", "max_results"}`.
+
+        An unknown or missing name falls back to `fast_mode_default_preset`
+        rather than erroring — the client sends a name, never a raw number,
+        so presets can be retuned without breaking anyone's saved setting,
+        and a bad/stale name should never fail a search.
+        """
+        presets = self._params["fast_mode"]["presets"]
+        default_name = self.fast_mode_default_preset
+        return presets.get(name, presets[default_name])
 
 
 settings = Settings()
