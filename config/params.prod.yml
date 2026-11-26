@@ -23,6 +23,14 @@ fast_mode:
     balanced: { threshold: 0.5, max_results: 5 }
     precise: { threshold: 0.7, max_results: 5 }
 
+# Flags queries that ask SurfMind to *do* something with a page
+# ("summarize this", "make bullet points") instead of finding one, so the
+# response can carry a notice. Jev's yes/no (noul) primitive first; the
+# post-processing LLM as fallback if Jev fails.
+task_detection:
+  jev_model: jev-latest
+  threshold: 0.6
+
 rag:
   provider: openai
   model:

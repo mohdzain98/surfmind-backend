@@ -289,18 +289,19 @@ async def search(
     account, so results span every browser linked to it. Persists a
     successful search into recent-searches as a background task.
     """
+    start = time.monotonic()
     sync_account_id = await resolve_sync_account_id(browser_uuid=payload.user_id, db=db)
     redis_key = f"user:{sync_account_id}:{payload.flag}"
     user_data = await asyncio.to_thread(redis_client.get, redis_key)
     history: dict = json.loads(user_data)
     try:
         history_data = history.get("data", [])
-        start = time.monotonic()
         response = await service.invoke_rag(
             data=payload, history=history_data, user_id=str(sync_account_id), db=db
         )
-        duration_ms = int((time.monotonic() - start) * 1000)
         await _annotate_source_browser(response.docs, payload.user_id, db)
+        duration_ms = int((time.monotonic() - start) * 1000)
+        response.duration_ms = duration_ms
         if response.success:
             background_tasks.add_task(
                 persist_search,
@@ -339,6 +340,10 @@ async def search_stream(
     Emits a final event with the full response or an error event. Persists
     a successful search into recent-searches after the stream completes.
     """
+    # Request arrival, not stream start — `duration_ms` on the final event
+    # is the complete server-side time the user waited for, Redis reads
+    # and account resolution included.
+    request_start = time.monotonic()
     sync_account_id = await resolve_sync_account_id(browser_uuid=payload.user_id, db=db)
     result_holder: dict = {}
 
@@ -359,8 +364,6 @@ async def search_stream(
         user_data = await asyncio.to_thread(redis_client.get, redis_key)
         history_data = json.loads(user_data).get("data", []) if user_data else []
         bookmark_data = []
-
-    stream_start = time.monotonic()
 
     async def event_stream():
         try:
@@ -398,6 +401,7 @@ async def search_stream(
                         await _annotate_source_browser(
                             data.get("docs") or [], payload.user_id, db
                         )
+                    data["duration_ms"] = int((time.monotonic() - request_start) * 1000)
                     result_holder["data"] = data
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as exc:
@@ -412,8 +416,10 @@ async def search_stream(
         data = result_holder.get("data")
         if not data:
             return
-        duration_ms = int((time.monotonic() - stream_start) * 1000)
-        # Total request time (stream start to final event) for every
+        # Same number the frontend received on the final event, so the UI,
+        # this log line, and stored search history all agree.
+        duration_ms = data["duration_ms"]
+        # Total request time (request arrival to final event) for every
         # completed search-stream call, Fast or Standard — logged
         # unconditionally, independent of whether it's persisted below, so
         # a no_match/failed search still counts toward a real latency
