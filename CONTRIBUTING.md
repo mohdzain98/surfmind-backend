@@ -33,7 +33,8 @@ See `README.md` for environment setup, `.env`, Postgres, and migrations.
   -m "..."`, then review the generated file — autogenerate doesn't always
   get constraints/indexes right).
 - Test migrations against a real local Postgres before merging
-  (`docker compose up -d`, `alembic upgrade head`) — this repo has no
+  (`alembic upgrade head`, then `alembic downgrade -1` and upgrade again
+  to check the downgrade path) — this repo has no
   migration test suite, so this is the only verification.
 - All storage/retrieval is scoped to the resolved `sync_account_id`
   (`src/services/sync_service/sync.py::resolve_sync_account_id`), never a
@@ -64,3 +65,20 @@ local server and Postgres/Redis before opening a PR.
 - Focus commit messages on *why*, not a restatement of the diff.
 - Don't force-push or rewrite history on `main` or `staging` — both are
   live deploy targets.
+
+## License of Contributions
+
+By submitting a pull request, you agree that:
+
+- you wrote the contribution yourself, or otherwise have the right to
+  submit it;
+- it is licensed under the same terms as this repository (PolyForm
+  Noncommercial License 1.0.0, see `LICENSE`); and
+- you also grant Mohd Zain a perpetual, worldwide, irrevocable,
+  royalty-free right to use, modify, and relicense your contribution
+  under any other terms, including commercial licenses.
+
+The last point is what lets the project offer separate commercial
+licenses: without it, code you contribute could only ever be used under
+the noncommercial terms, and could not be included in a commercially
+licensed copy. You keep the copyright to your contribution.

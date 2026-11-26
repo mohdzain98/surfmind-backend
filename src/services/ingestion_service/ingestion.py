@@ -1,3 +1,7 @@
+# Copyright (c) 2025 Mohd Zain. SurfMind Backend.
+# Licensed under the PolyForm Noncommercial License 1.0.0 (see LICENSE).
+# Commercial use requires a separate license: https://surfmind.docschat.in/contact
+
 """Ingestion path that upserts pages, their sections, and embeddings.
 
 Called from `/save-data` so embeddings are written once at ingestion time

@@ -1,3 +1,7 @@
+# Copyright (c) 2025 Mohd Zain. SurfMind Backend.
+# Licensed under the PolyForm Noncommercial License 1.0.0 (see LICENSE).
+# Commercial use requires a separate license: https://surfmind.docschat.in/contact
+
 """Data-deletion actions backing the Settings Privacy section.
 
 Both actions key off `sync_account_id`, not the raw browser id, so a

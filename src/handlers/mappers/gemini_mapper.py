@@ -1,3 +1,7 @@
+# Copyright (c) 2025 Mohd Zain. SurfMind Backend.
+# Licensed under the PolyForm Noncommercial License 1.0.0 (see LICENSE).
+# Commercial use requires a separate license: https://surfmind.docschat.in/contact
+
 import google.api_core.exceptions as google_exceptions
 from src.handlers.mappers.base_mapper import BaseExceptionMapper
 

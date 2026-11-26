@@ -1,4 +1,4 @@
-.PHONY: venv install run migrate admin format lint check clean
+.PHONY: venv install run migrate admin format lint check clean license license-check
 
 VENV := .venv
 PYTHON := $(VENV)/bin/python
@@ -29,3 +29,12 @@ check: format lint
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +
+
+# Add the licence header to src/ and scripts/ .py files, or update an
+# outdated one after HEADER in scripts/add_license_header.py changes.
+license:
+	$(PYTHON) scripts/add_license_header.py
+
+# Report missing/outdated headers without changing anything; exits 1 if any.
+license-check:
+	$(PYTHON) scripts/add_license_header.py --check

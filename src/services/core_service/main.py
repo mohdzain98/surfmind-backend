@@ -1,3 +1,7 @@
+# Copyright (c) 2025 Mohd Zain. SurfMind Backend.
+# Licensed under the PolyForm Noncommercial License 1.0.0 (see LICENSE).
+# Commercial use requires a separate license: https://surfmind.docschat.in/contact
+
 """Core retrieval orchestration for SurfMind RAG flows.
 Provides synchronous and streaming pipelines for search.
 Includes a mock streamer to test UI progress handling.
