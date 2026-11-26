@@ -1,0 +1,3460 @@
+{
+  "schema_version": "1.5",
+  "generator": {
+    "name": "gnost",
+    "version": "0.7.0"
+  },
+  "project": {
+    "name": "surfmind-backend",
+    "languages": {
+      "python": 77
+    },
+    "framework": "FastAPI",
+    "files": 77,
+    "parsers": {
+      "python": "ast"
+    }
+  },
+  "entry_points": [
+    {
+      "file": "src/controller/main_controller.py",
+      "reason": "FastAPI app initialization",
+      "priority": "primary"
+    },
+    {
+      "file": "scripts/cleanup_test_data.py",
+      "reason": "__main__ guard",
+      "priority": "secondary"
+    },
+    {
+      "file": "scripts/create_admin.py",
+      "reason": "__main__ guard",
+      "priority": "secondary"
+    }
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/",
+      "handler": "root_health_check",
+      "file": "src/controller/main_controller.py",
+      "line": 76,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "health_check",
+      "file": "src/controller/main_controller.py",
+      "line": 82,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/accounts",
+      "handler": "list_accounts_route",
+      "file": "src/controller/admin_controller.py",
+      "line": 471,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/admin/accounts/{sync_account_id}",
+      "handler": "admin_delete_account_route",
+      "file": "src/controller/admin_controller.py",
+      "line": 870,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/accounts/{sync_account_id}",
+      "handler": "account_detail_route",
+      "file": "src/controller/admin_controller.py",
+      "line": 666,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/accounts/{sync_account_id}/clear-data",
+      "handler": "admin_clear_data_route",
+      "file": "src/controller/admin_controller.py",
+      "line": 826,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/accounts/{sync_account_id}/searches",
+      "handler": "account_searches_route",
+      "file": "src/controller/admin_controller.py",
+      "line": 726,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/accounts/{sync_account_id}/unlink-browser",
+      "handler": "admin_unlink_browser_route",
+      "file": "src/controller/admin_controller.py",
+      "line": 793,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/login",
+      "handler": "login_route",
+      "file": "src/controller/admin_controller.py",
+      "line": 79,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/status/health",
+      "handler": "health_route",
+      "file": "src/controller/admin_controller.py",
+      "line": 89,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/status/llm-usage",
+      "handler": "llm_usage_route",
+      "file": "src/controller/admin_controller.py",
+      "line": 314,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/status/logs",
+      "handler": "logs_route",
+      "file": "src/controller/admin_controller.py",
+      "line": 258,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/status/nginx-logs",
+      "handler": "nginx_logs_route",
+      "file": "src/controller/admin_controller.py",
+      "line": 934,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/status/search-metrics",
+      "handler": "search_metrics_route",
+      "file": "src/controller/admin_controller.py",
+      "line": 388,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/status/stats",
+      "handler": "stats_route",
+      "file": "src/controller/admin_controller.py",
+      "line": 206,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/sync-codes/{code}/revoke",
+      "handler": "admin_revoke_sync_code_route",
+      "file": "src/controller/admin_controller.py",
+      "line": 851,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/categories/classify",
+      "handler": "classify_route",
+      "file": "src/controller/category_controller.py",
+      "line": 214,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/categories/classify-status",
+      "handler": "classify_status_route",
+      "file": "src/controller/category_controller.py",
+      "line": 236,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/categories/create",
+      "handler": "create_category_route",
+      "file": "src/controller/category_controller.py",
+      "line": 119,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/categories/disable",
+      "handler": "disable_route",
+      "file": "src/controller/category_controller.py",
+      "line": 201,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/categories/enable",
+      "handler": "enable_route",
+      "file": "src/controller/category_controller.py",
+      "line": 184,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/categories/list",
+      "handler": "list_categories_route",
+      "file": "src/controller/category_controller.py",
+      "line": 68,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/categories/pages",
+      "handler": "list_categorized_pages_route",
+      "file": "src/controller/category_controller.py",
+      "line": 95,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/categories/refresh",
+      "handler": "refresh_route",
+      "file": "src/controller/category_controller.py",
+      "line": 242,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/categories/search-analytics",
+      "handler": "search_analytics_route",
+      "file": "src/controller/category_controller.py",
+      "line": 107,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/categories/{category_id}",
+      "handler": "delete_category_route",
+      "file": "src/controller/category_controller.py",
+      "line": 170,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/categories/{category_id}/update",
+      "handler": "update_category_route",
+      "file": "src/controller/category_controller.py",
+      "line": 146,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/recent-searches",
+      "handler": "recent_searches_route",
+      "file": "src/controller/core_controller.py",
+      "line": 461,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/save-data",
+      "handler": "save_data",
+      "file": "src/controller/core_controller.py",
+      "line": 170,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/search",
+      "handler": "search",
+      "file": "src/controller/core_controller.py",
+      "line": 281,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/search-stream",
+      "handler": "search_stream",
+      "file": "src/controller/core_controller.py",
+      "line": 327,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/sync/devices",
+      "handler": "list_devices_route",
+      "file": "src/controller/sync_controller.py",
+      "line": 135,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/sync/devices/rename",
+      "handler": "rename_device_route",
+      "file": "src/controller/sync_controller.py",
+      "line": 148,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/sync/devices/unlink",
+      "handler": "unlink_device_route",
+      "file": "src/controller/sync_controller.py",
+      "line": 172,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/sync/generate-code",
+      "handler": "generate_code_route",
+      "file": "src/controller/sync_controller.py",
+      "line": 46,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/sync/page-counts",
+      "handler": "page_counts_route",
+      "file": "src/controller/sync_controller.py",
+      "line": 116,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/sync/redeem-code",
+      "handler": "redeem_code_route",
+      "file": "src/controller/sync_controller.py",
+      "line": 64,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/sync/status",
+      "handler": "sync_status_route",
+      "file": "src/controller/sync_controller.py",
+      "line": 95,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/sync/unlink",
+      "handler": "unlink_route",
+      "file": "src/controller/sync_controller.py",
+      "line": 83,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/user/data",
+      "handler": "clear_all_data_route",
+      "file": "src/controller/core_controller.py",
+      "line": 524,
+      "framework": "FastAPI"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/user/history",
+      "handler": "clear_history_route",
+      "file": "src/controller/core_controller.py",
+      "line": 480,
+      "framework": "FastAPI"
+    }
+  ],
+  "change_history": {
+    "available": true,
+    "reason": null,
+    "window_days": 365,
+    "commits_analyzed": 57,
+    "files": [
+      {
+        "path": "src/controller/core_controller.py",
+        "score": 90.0,
+        "commits": 17,
+        "authors": 1,
+        "recent_commits": 13,
+        "lines_added": 668,
+        "lines_removed": 121,
+        "last_changed": "2026-11-13"
+      },
+      {
+        "path": "src/models/core.py",
+        "score": 87.4,
+        "commits": 13,
+        "authors": 1,
+        "recent_commits": 10,
+        "lines_added": 380,
+        "lines_removed": 7,
+        "last_changed": "2026-11-15"
+      },
+      {
+        "path": "src/services/core_service/main.py",
+        "score": 80.5,
+        "commits": 11,
+        "authors": 1,
+        "recent_commits": 8,
+        "lines_added": 733,
+        "lines_removed": 81,
+        "last_changed": "2026-11-12"
+      },
+      {
+        "path": "src/controller/main_controller.py",
+        "score": 76.1,
+        "commits": 10,
+        "authors": 1,
+        "recent_commits": 7,
+        "lines_added": 116,
+        "lines_removed": 18,
+        "last_changed": "2026-11-14"
+      },
+      {
+        "path": "src/services/core_service/rag.py",
+        "score": 76.1,
+        "commits": 10,
+        "authors": 1,
+        "recent_commits": 7,
+        "lines_added": 827,
+        "lines_removed": 169,
+        "last_changed": "2026-11-12"
+      },
+      {
+        "path": "src/controller/admin_controller.py",
+        "score": 76.1,
+        "commits": 9,
+        "authors": 1,
+        "recent_commits": 9,
+        "lines_added": 984,
+        "lines_removed": 23,
+        "last_changed": "2026-11-15"
+      },
+      {
+        "path": "src/db/models.py",
+        "score": 76.1,
+        "commits": 9,
+        "authors": 1,
+        "recent_commits": 9,
+        "lines_added": 376,
+        "lines_removed": 0,
+        "last_changed": "2026-11-15"
+      },
+      {
+        "path": "src/services/ingestion_service/ingestion.py",
+        "score": 76.1,
+        "commits": 9,
+        "authors": 1,
+        "recent_commits": 9,
+        "lines_added": 654,
+        "lines_removed": 23,
+        "last_changed": "2026-11-04"
+      },
+      {
+        "path": "src/services/sync_service/sync.py",
+        "score": 76.1,
+        "commits": 9,
+        "authors": 1,
+        "recent_commits": 9,
+        "lines_added": 751,
+        "lines_removed": 44,
+        "last_changed": "2026-10-11"
+      },
+      {
+        "path": "src/utility/settings.py",
+        "score": 69.2,
+        "commits": 8,
+        "authors": 1,
+        "recent_commits": 8,
+        "lines_added": 311,
+        "lines_removed": 6,
+        "last_changed": "2026-11-15"
+      },
+      {
+        "path": "src/controller/sync_controller.py",
+        "score": 62.6,
+        "commits": 6,
+        "authors": 1,
+        "recent_commits": 6,
+        "lines_added": 215,
+        "lines_removed": 19,
+        "last_changed": "2026-10-11"
+      },
+      {
+        "path": "src/services/post_processing_service/post_processing.py",
+        "score": 57.7,
+        "commits": 6,
+        "authors": 1,
+        "recent_commits": 3,
+        "lines_added": 180,
+        "lines_removed": 26,
+        "last_changed": "2026-11-04"
+      },
+      {
+        "path": "src/utility/logger.py",
+        "score": 57.7,
+        "commits": 6,
+        "authors": 1,
+        "recent_commits": 3,
+        "lines_added": 256,
+        "lines_removed": 52,
+        "last_changed": "2026-09-18"
+      },
+      {
+        "path": "src/services/category_service/category.py",
+        "score": 57.6,
+        "commits": 5,
+        "authors": 1,
+        "recent_commits": 5,
+        "lines_added": 414,
+        "lines_removed": 14,
+        "last_changed": "2026-11-15"
+      },
+      {
+        "path": "src/services/privacy_service/privacy.py",
+        "score": 53.4,
+        "commits": 4,
+        "authors": 1,
+        "recent_commits": 4,
+        "lines_added": 84,
+        "lines_removed": 8,
+        "last_changed": "2026-11-13"
+      },
+      {
+        "path": "src/services/llm_service/llm_provider.py",
+        "score": 49.8,
+        "commits": 5,
+        "authors": 1,
+        "recent_commits": 2,
+        "lines_added": 159,
+        "lines_removed": 11,
+        "last_changed": "2026-09-17"
+      },
+      {
+        "path": "src/controller/category_controller.py",
+        "score": 45.6,
+        "commits": 3,
+        "authors": 1,
+        "recent_commits": 3,
+        "lines_added": 273,
+        "lines_removed": 5,
+        "last_changed": "2026-11-15"
+      },
+      {
+        "path": "src/services/classification_service/tasks.py",
+        "score": 45.6,
+        "commits": 3,
+        "authors": 1,
+        "recent_commits": 3,
+        "lines_added": 178,
+        "lines_removed": 4,
+        "last_changed": "2026-11-15"
+      },
+      {
+        "path": "src/services/search_history_service/search_history.py",
+        "score": 45.6,
+        "commits": 3,
+        "authors": 1,
+        "recent_commits": 3,
+        "lines_added": 101,
+        "lines_removed": 5,
+        "last_changed": "2026-11-12"
+      },
+      {
+        "path": "src/utility/provider.py",
+        "score": 43.7,
+        "commits": 4,
+        "authors": 1,
+        "recent_commits": 1,
+        "lines_added": 217,
+        "lines_removed": 31,
+        "last_changed": "2026-08-28"
+      },
+      {
+        "path": "src/services/llm_service/prompt_builder.py",
+        "score": 38.9,
+        "commits": 3,
+        "authors": 1,
+        "recent_commits": 1,
+        "lines_added": 71,
+        "lines_removed": 28,
+        "last_changed": "2026-08-28"
+      },
+      {
+        "path": "src/services/classification_service/classify.py",
+        "score": 29.7,
+        "commits": 2,
+        "authors": 1,
+        "recent_commits": 2,
+        "lines_added": 128,
+        "lines_removed": 6,
+        "last_changed": "2026-11-15"
+      },
+      {
+        "path": "src/utility/pricing.py",
+        "score": 29.7,
+        "commits": 2,
+        "authors": 1,
+        "recent_commits": 2,
+        "lines_added": 47,
+        "lines_removed": 4,
+        "last_changed": "2026-11-15"
+      },
+      {
+        "path": "src/models/ai_models.py",
+        "score": 26.8,
+        "commits": 2,
+        "authors": 1,
+        "recent_commits": 1,
+        "lines_added": 42,
+        "lines_removed": 2,
+        "last_changed": "2026-08-28"
+      },
+      {
+        "path": "src/__init__.py",
+        "score": 21.5,
+        "commits": 2,
+        "authors": 1,
+        "recent_commits": 0,
+        "lines_added": 4,
+        "lines_removed": 0,
+        "last_changed": "2025-12-27"
+      },
+      {
+        "path": "src/controller/__init__.py",
+        "score": 21.5,
+        "commits": 2,
+        "authors": 1,
+        "recent_commits": 0,
+        "lines_added": 4,
+        "lines_removed": 0,
+        "last_changed": "2025-12-27"
+      },
+      {
+        "path": "src/models/__init__.py",
+        "score": 21.5,
+        "commits": 2,
+        "authors": 1,
+        "recent_commits": 0,
+        "lines_added": 3,
+        "lines_removed": 0,
+        "last_changed": "2025-12-27"
+      },
+      {
+        "path": "src/services/core_service/__init__.py",
+        "score": 21.5,
+        "commits": 2,
+        "authors": 1,
+        "recent_commits": 0,
+        "lines_added": 3,
+        "lines_removed": 0,
+        "last_changed": "2025-12-27"
+      },
+      {
+        "path": "src/services/llm_service/__init__.py",
+        "score": 21.5,
+        "commits": 2,
+        "authors": 1,
+        "recent_commits": 0,
+        "lines_added": 3,
+        "lines_removed": 0,
+        "last_changed": "2025-12-27"
+      },
+      {
+        "path": "src/services/post_processing_service/__init__.py",
+        "score": 21.5,
+        "commits": 2,
+        "authors": 1,
+        "recent_commits": 0,
+        "lines_added": 3,
+        "lines_removed": 0,
+        "last_changed": "2025-12-27"
+      },
+      {
+        "path": "src/utility/__init__.py",
+        "score": 21.5,
+        "commits": 2,
+        "authors": 1,
+        "recent_commits": 0,
+        "lines_added": 3,
+        "lines_removed": 0,
+        "last_changed": "2025-12-27"
+      },
+      {
+        "path": "src/utility/utils.py",
+        "score": 21.5,
+        "commits": 2,
+        "authors": 1,
+        "recent_commits": 0,
+        "lines_added": 33,
+        "lines_removed": 0,
+        "last_changed": "2025-12-27"
+      }
+    ]
+  },
+  "risk": {
+    "threshold": 20.0,
+    "files": [
+      {
+        "path": "src/controller/admin_controller.py",
+        "risk": 58.1,
+        "structural_score": 76.4,
+        "change_score": 76.1,
+        "commits": 9,
+        "authors": 1,
+        "recent_commits": 9,
+        "reasons": [
+          "size",
+          "observability"
+        ]
+      },
+      {
+        "path": "src/services/ingestion_service/ingestion.py",
+        "risk": 54.0,
+        "structural_score": 70.9,
+        "change_score": 76.1,
+        "commits": 9,
+        "authors": 1,
+        "recent_commits": 9,
+        "reasons": [
+          "complexity",
+          "size"
+        ]
+      },
+      {
+        "path": "src/utility/settings.py",
+        "risk": 35.6,
+        "structural_score": 51.5,
+        "change_score": 69.2,
+        "commits": 8,
+        "authors": 1,
+        "recent_commits": 8,
+        "reasons": [
+          "impact",
+          "size"
+        ]
+      },
+      {
+        "path": "src/services/core_service/rag.py",
+        "risk": 35.1,
+        "structural_score": 46.1,
+        "change_score": 76.1,
+        "commits": 10,
+        "authors": 1,
+        "recent_commits": 7,
+        "reasons": [
+          "size",
+          "complexity"
+        ]
+      },
+      {
+        "path": "src/services/sync_service/sync.py",
+        "risk": 32.1,
+        "structural_score": 42.2,
+        "change_score": 76.1,
+        "commits": 9,
+        "authors": 1,
+        "recent_commits": 9,
+        "reasons": [
+          "size",
+          "observability"
+        ]
+      },
+      {
+        "path": "src/services/core_service/main.py",
+        "risk": 28.7,
+        "structural_score": 35.6,
+        "change_score": 80.5,
+        "commits": 11,
+        "authors": 1,
+        "recent_commits": 8,
+        "reasons": [
+          "size",
+          "coupling"
+        ]
+      },
+      {
+        "path": "src/controller/core_controller.py",
+        "risk": 27.5,
+        "structural_score": 30.6,
+        "change_score": 90.0,
+        "commits": 17,
+        "authors": 1,
+        "recent_commits": 13,
+        "reasons": [
+          "size",
+          "coupling"
+        ]
+      },
+      {
+        "path": "src/db/models.py",
+        "risk": 26.5,
+        "structural_score": 34.8,
+        "change_score": 76.1,
+        "commits": 9,
+        "authors": 1,
+        "recent_commits": 9,
+        "reasons": [
+          "impact",
+          "size"
+        ]
+      },
+      {
+        "path": "src/utility/logger.py",
+        "risk": 24.9,
+        "structural_score": 43.1,
+        "change_score": 57.7,
+        "commits": 6,
+        "authors": 1,
+        "recent_commits": 3,
+        "reasons": [
+          "impact"
+        ]
+      }
+    ]
+  },
+  "quickstart": {
+    "prerequisites": [
+      {
+        "text": "Docker",
+        "source": "docker-compose.yml",
+        "command": false
+      }
+    ],
+    "install": [
+      {
+        "text": "pip install -e .",
+        "source": "pyproject.toml",
+        "command": true
+      },
+      {
+        "text": "make install",
+        "source": "Makefile",
+        "command": true
+      }
+    ],
+    "build": [],
+    "run": [
+      {
+        "text": "make run",
+        "source": "Makefile",
+        "command": true
+      },
+      {
+        "text": "docker compose up",
+        "source": "docker-compose.yml",
+        "command": true
+      }
+    ],
+    "test": [
+      {
+        "text": "make check",
+        "source": "Makefile",
+        "command": true
+      }
+    ],
+    "environment": [
+      {
+        "text": "OPENAI_API_KEY",
+        "source": ".env.example",
+        "command": false
+      },
+      {
+        "text": "GEMINI_API_KEY",
+        "source": ".env.example",
+        "command": false
+      },
+      {
+        "text": "TYPESAFE_API_KEY",
+        "source": ".env.example",
+        "command": false
+      },
+      {
+        "text": "REDIS_HOST",
+        "source": ".env.example",
+        "command": false
+      },
+      {
+        "text": "REDIS_PORT",
+        "source": ".env.example",
+        "command": false
+      },
+      {
+        "text": "DATABASE_URL",
+        "source": ".env.example",
+        "command": false
+      },
+      {
+        "text": "ENVIRONMENT",
+        "source": ".env.example",
+        "command": false
+      },
+      {
+        "text": "DEBUG",
+        "source": ".env.example",
+        "command": false
+      }
+    ]
+  },
+  "architecture": {
+    "configured": false,
+    "rules": 0,
+    "edges_checked": 0,
+    "fail": false,
+    "violations": []
+  },
+  "flows": [
+    {
+      "kind": "route",
+      "label": "POST /v1/save-data",
+      "size": 26,
+      "truncated": true,
+      "entry": {
+        "function": "save_data",
+        "file": "src/controller/core_controller.py",
+        "line": 170,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "_default_heading_path",
+            "file": "src/services/ingestion_service/ingestion.py",
+            "line": 97,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "resolve_sync_account_id",
+            "file": "src/services/sync_service/sync.py",
+            "line": 120,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "_persist_embeddings",
+            "file": "src/controller/core_controller.py",
+            "line": 134,
+            "repeat": false,
+            "calls": [
+              {
+                "function": "_ingest_with_own_session",
+                "file": "src/controller/core_controller.py",
+                "line": 109,
+                "repeat": false,
+                "calls": [
+                  {
+                    "function": "ingest_batch",
+                    "file": "src/services/ingestion_service/ingestion.py",
+                    "line": 377,
+                    "repeat": false,
+                    "calls": [
+                      {
+                        "function": "_dedupe_sections",
+                        "file": "src/services/ingestion_service/ingestion.py",
+                        "line": 156,
+                        "repeat": false,
+                        "calls": [
+                          {
+                            "function": "_default_heading_path",
+                            "file": "src/services/ingestion_service/ingestion.py",
+                            "line": 97,
+                            "repeat": true,
+                            "calls": []
+                          }
+                        ]
+                      },
+                      {
+                        "function": "_group_by_url",
+                        "file": "src/services/ingestion_service/ingestion.py",
+                        "line": 148,
+                        "repeat": false,
+                        "calls": []
+                      },
+                      {
+                        "function": "_hash_url",
+                        "file": "src/services/ingestion_service/ingestion.py",
+                        "line": 119,
+                        "repeat": false,
+                        "calls": []
+                      },
+                      {
+                        "function": "_upsert_pages",
+                        "file": "src/services/ingestion_service/ingestion.py",
+                        "line": 288,
+                        "repeat": false,
+                        "calls": [
+                          {
+                            "function": "_hash_url",
+                            "file": "src/services/ingestion_service/ingestion.py",
+                            "line": 119,
+                            "repeat": true,
+                            "calls": []
+                          },
+                          {
+                            "function": "_classify_page_type",
+                            "file": "src/services/ingestion_service/ingestion.py",
+                            "line": 169,
+                            "repeat": false,
+                            "calls": []
+                          },
+                          {
+                            "function": "_parse_bookmark_visited_at",
+                            "file": "src/services/ingestion_service/ingestion.py",
+                            "line": 132,
+                            "repeat": false,
+                            "calls": []
+                          }
+                        ]
+                      },
+                      {
+                        "function": "_default_heading_path",
+                        "file": "src/services/ingestion_service/ingestion.py",
+                        "line": 97,
+                        "repeat": true,
+                        "calls": []
+                      },
+                      {
+                        "function": "_hash_heading_path",
+                        "file": "src/services/ingestion_service/ingestion.py",
+                        "line": 125,
+                        "repeat": false,
+                        "calls": []
+                      },
+                      {
+                        "function": "_get_account_tier",
+                        "file": "src/services/ingestion_service/ingestion.py",
+                        "line": 209,
+                        "repeat": false,
+                        "calls": []
+                      },
+                      {
+                        "function": "_build_embedding_inputs",
+                        "file": "src/services/ingestion_service/ingestion.py",
+                        "line": 245,
+                        "repeat": false,
+                        "calls": [
+                          {
+                            "function": "_embedding_input",
+                            "file": "src/services/ingestion_service/ingestion.py",
+                            "line": 183,
+                            "repeat": false,
+                            "calls": []
+                          },
+                          {
+                            "function": "_default_heading_path",
+                            "file": "src/services/ingestion_service/ingestion.py",
+                            "line": 97,
+                            "repeat": true,
+                            "calls": []
+                          },
+                          {
+                            "function": "_bookmark_embedding_text",
+                            "file": "src/services/ingestion_service/ingestion.py",
+                            "line": 190,
+                            "repeat": false,
+                            "calls": []
+                          },
+                          {
+                            "function": "LLMProvider.__init__",
+                            "file": "src/services/llm_service/llm_provider.py",
+                            "line": 28,
+                            "repeat": false,
+                            "calls": []
+                          },
+                          {
+                            "function": "Prompts.__init__",
+                            "file": "src/services/llm_service/prompt_builder.py",
+                            "line": 18,
+                            "repeat": false,
+                            "calls": []
+                          },
+                          {
+                            "function": "_summarize_section",
+                            "file": "src/services/ingestion_service/ingestion.py",
+                            "line": 221,
+                            "repeat": false,
+                            "calls": []
+                          }
+                        ]
+                      },
+                      {
+                        "function": "EmbeddingsProvider.get_default_embeddings",
+                        "file": "src/utility/provider.py",
+                        "line": 167,
+                        "repeat": false,
+                        "calls": [
+                          {
+                            "function": "EmbeddingsProvider._build_embeddings",
+                            "file": "src/utility/provider.py",
+                            "line": 151,
+                            "repeat": false,
+                            "calls": []
+                          },
+                          {
+                            "function": "FallbackEmbeddings.__init__",
+                            "file": "src/utility/provider.py",
+                            "line": 78,
+                            "repeat": false,
+                            "calls": []
+                          }
+                        ]
+                      },
+                      {
+                        "function": "_chunk_by_token_budget",
+                        "file": "src/services/ingestion_service/ingestion.py",
+                        "line": 52,
+                        "repeat": false,
+                        "calls": []
+                      },
+                      {
+                        "function": "_trim_to_cap",
+                        "file": "src/services/ingestion_service/ingestion.py",
+                        "line": 561,
+                        "repeat": false,
+                        "calls": [
+                          {
+                            "function": "_cap_for",
+                            "file": "src/services/ingestion_service/ingestion.py",
+                            "line": 89,
+                            "repeat": false,
+                            "calls": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "function": "ingest_batch",
+                "file": "src/services/ingestion_service/ingestion.py",
+                "line": 377,
+                "repeat": true,
+                "calls": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/categories/enable",
+      "size": 15,
+      "truncated": true,
+      "entry": {
+        "function": "enable_route",
+        "file": "src/controller/category_controller.py",
+        "line": 184,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "resolve_sync_account_id",
+            "file": "src/services/sync_service/sync.py",
+            "line": 120,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "enable_categorization",
+            "file": "src/services/category_service/category.py",
+            "line": 89,
+            "repeat": false,
+            "calls": [
+              {
+                "function": "is_categorization_enabled",
+                "file": "src/services/category_service/category.py",
+                "line": 60,
+                "repeat": false,
+                "calls": []
+              },
+              {
+                "function": "_create_default_categories",
+                "file": "src/services/category_service/category.py",
+                "line": 69,
+                "repeat": false,
+                "calls": []
+              }
+            ]
+          },
+          {
+            "function": "classify_pages_task",
+            "file": "src/services/classification_service/tasks.py",
+            "line": 173,
+            "repeat": false,
+            "calls": [
+              {
+                "function": "_run_and_dispose",
+                "file": "src/services/classification_service/tasks.py",
+                "line": 155,
+                "repeat": false,
+                "calls": [
+                  {
+                    "function": "classify_pages_async",
+                    "file": "src/services/classification_service/tasks.py",
+                    "line": 87,
+                    "repeat": false,
+                    "calls": [
+                      {
+                        "function": "list_categories",
+                        "file": "src/services/category_service/category.py",
+                        "line": 163,
+                        "repeat": false,
+                        "calls": []
+                      },
+                      {
+                        "function": "_get_classification_targets",
+                        "file": "src/services/classification_service/tasks.py",
+                        "line": 55,
+                        "repeat": false,
+                        "calls": []
+                      },
+                      {
+                        "function": "PageClassifier.__init__",
+                        "file": "src/services/classification_service/classify.py",
+                        "line": 31,
+                        "repeat": false,
+                        "calls": []
+                      },
+                      {
+                        "function": "LLMProvider.__init__",
+                        "file": "src/services/llm_service/llm_provider.py",
+                        "line": 28,
+                        "repeat": false,
+                        "calls": [
+                          {
+                            "function": "SecretsProvider.get_openai_api_key",
+                            "file": "src/utility/provider.py",
+                            "line": 32,
+                            "repeat": false,
+                            "calls": []
+                          },
+                          {
+                            "function": "SecretsProvider.get_gemini_api_key",
+                            "file": "src/utility/provider.py",
+                            "line": 45,
+                            "repeat": false,
+                            "calls": []
+                          },
+                          {
+                            "function": "LLMProvider._build_chat_model",
+                            "file": "src/services/llm_service/llm_provider.py",
+                            "line": 88,
+                            "repeat": false,
+                            "calls": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/categories/refresh",
+      "size": 15,
+      "truncated": true,
+      "entry": {
+        "function": "refresh_route",
+        "file": "src/controller/category_controller.py",
+        "line": 242,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "resolve_sync_account_id",
+            "file": "src/services/sync_service/sync.py",
+            "line": 120,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "is_categorization_enabled",
+            "file": "src/services/category_service/category.py",
+            "line": 60,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "get_refresh_available_at",
+            "file": "src/services/category_service/category.py",
+            "line": 118,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "refresh_categorization",
+            "file": "src/services/category_service/category.py",
+            "line": 141,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "classify_pages_task",
+            "file": "src/services/classification_service/tasks.py",
+            "line": 173,
+            "repeat": false,
+            "calls": [
+              {
+                "function": "_run_and_dispose",
+                "file": "src/services/classification_service/tasks.py",
+                "line": 155,
+                "repeat": false,
+                "calls": [
+                  {
+                    "function": "classify_pages_async",
+                    "file": "src/services/classification_service/tasks.py",
+                    "line": 87,
+                    "repeat": false,
+                    "calls": [
+                      {
+                        "function": "list_categories",
+                        "file": "src/services/category_service/category.py",
+                        "line": 163,
+                        "repeat": false,
+                        "calls": []
+                      },
+                      {
+                        "function": "_get_classification_targets",
+                        "file": "src/services/classification_service/tasks.py",
+                        "line": 55,
+                        "repeat": false,
+                        "calls": []
+                      },
+                      {
+                        "function": "PageClassifier.__init__",
+                        "file": "src/services/classification_service/classify.py",
+                        "line": 31,
+                        "repeat": false,
+                        "calls": []
+                      },
+                      {
+                        "function": "LLMProvider.__init__",
+                        "file": "src/services/llm_service/llm_provider.py",
+                        "line": 28,
+                        "repeat": false,
+                        "calls": [
+                          {
+                            "function": "SecretsProvider.get_openai_api_key",
+                            "file": "src/utility/provider.py",
+                            "line": 32,
+                            "repeat": false,
+                            "calls": []
+                          },
+                          {
+                            "function": "SecretsProvider.get_gemini_api_key",
+                            "file": "src/utility/provider.py",
+                            "line": 45,
+                            "repeat": false,
+                            "calls": []
+                          },
+                          {
+                            "function": "LLMProvider._build_chat_model",
+                            "file": "src/services/llm_service/llm_provider.py",
+                            "line": 88,
+                            "repeat": false,
+                            "calls": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/categories/classify",
+      "size": 14,
+      "truncated": true,
+      "entry": {
+        "function": "classify_route",
+        "file": "src/controller/category_controller.py",
+        "line": 214,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "resolve_sync_account_id",
+            "file": "src/services/sync_service/sync.py",
+            "line": 120,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "is_categorization_enabled",
+            "file": "src/services/category_service/category.py",
+            "line": 60,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "count_unclassified_pages",
+            "file": "src/services/classification_service/tasks.py",
+            "line": 35,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "classify_pages_task",
+            "file": "src/services/classification_service/tasks.py",
+            "line": 173,
+            "repeat": false,
+            "calls": [
+              {
+                "function": "_run_and_dispose",
+                "file": "src/services/classification_service/tasks.py",
+                "line": 155,
+                "repeat": false,
+                "calls": [
+                  {
+                    "function": "classify_pages_async",
+                    "file": "src/services/classification_service/tasks.py",
+                    "line": 87,
+                    "repeat": false,
+                    "calls": [
+                      {
+                        "function": "list_categories",
+                        "file": "src/services/category_service/category.py",
+                        "line": 163,
+                        "repeat": false,
+                        "calls": []
+                      },
+                      {
+                        "function": "_get_classification_targets",
+                        "file": "src/services/classification_service/tasks.py",
+                        "line": 55,
+                        "repeat": false,
+                        "calls": []
+                      },
+                      {
+                        "function": "PageClassifier.__init__",
+                        "file": "src/services/classification_service/classify.py",
+                        "line": 31,
+                        "repeat": false,
+                        "calls": []
+                      },
+                      {
+                        "function": "LLMProvider.__init__",
+                        "file": "src/services/llm_service/llm_provider.py",
+                        "line": 28,
+                        "repeat": false,
+                        "calls": [
+                          {
+                            "function": "SecretsProvider.get_openai_api_key",
+                            "file": "src/utility/provider.py",
+                            "line": 32,
+                            "repeat": false,
+                            "calls": []
+                          },
+                          {
+                            "function": "SecretsProvider.get_gemini_api_key",
+                            "file": "src/utility/provider.py",
+                            "line": 45,
+                            "repeat": false,
+                            "calls": []
+                          },
+                          {
+                            "function": "LLMProvider._build_chat_model",
+                            "file": "src/services/llm_service/llm_provider.py",
+                            "line": 88,
+                            "repeat": false,
+                            "calls": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/sync/redeem-code",
+      "size": 9,
+      "truncated": false,
+      "entry": {
+        "function": "redeem_code_route",
+        "file": "src/controller/sync_controller.py",
+        "line": 64,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "redeem_code",
+            "file": "src/services/sync_service/sync.py",
+            "line": 307,
+            "repeat": false,
+            "calls": [
+              {
+                "function": "_migrate_browser_pages",
+                "file": "src/services/sync_service/sync.py",
+                "line": 254,
+                "repeat": false,
+                "calls": []
+              },
+              {
+                "function": "_get_account_tier",
+                "file": "src/services/ingestion_service/ingestion.py",
+                "line": 209,
+                "repeat": false,
+                "calls": []
+              },
+              {
+                "function": "_trim_to_cap",
+                "file": "src/services/ingestion_service/ingestion.py",
+                "line": 561,
+                "repeat": false,
+                "calls": [
+                  {
+                    "function": "_cap_for",
+                    "file": "src/services/ingestion_service/ingestion.py",
+                    "line": 89,
+                    "repeat": false,
+                    "calls": []
+                  }
+                ]
+              },
+              {
+                "function": "_set_sync_account",
+                "file": "src/services/sync_service/sync.py",
+                "line": 155,
+                "repeat": false,
+                "calls": []
+              },
+              {
+                "function": "_apply_device_metadata",
+                "file": "src/services/sync_service/sync.py",
+                "line": 92,
+                "repeat": false,
+                "calls": [
+                  {
+                    "function": "_normalize_device_name",
+                    "file": "src/services/sync_service/sync.py",
+                    "line": 72,
+                    "repeat": false,
+                    "calls": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/categories/list",
+      "size": 7,
+      "truncated": false,
+      "entry": {
+        "function": "list_categories_route",
+        "file": "src/controller/category_controller.py",
+        "line": 68,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "resolve_sync_account_id",
+            "file": "src/services/sync_service/sync.py",
+            "line": 120,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "is_categorization_enabled",
+            "file": "src/services/category_service/category.py",
+            "line": 60,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "list_categories",
+            "file": "src/services/category_service/category.py",
+            "line": 163,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "get_refresh_available_at",
+            "file": "src/services/category_service/category.py",
+            "line": 118,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "_get_tier",
+            "file": "src/controller/category_controller.py",
+            "line": 60,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "count_categories",
+            "file": "src/services/category_service/category.py",
+            "line": 217,
+            "repeat": false,
+            "calls": []
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/sync/generate-code",
+      "size": 7,
+      "truncated": false,
+      "entry": {
+        "function": "generate_code_route",
+        "file": "src/controller/sync_controller.py",
+        "line": 46,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "generate_code",
+            "file": "src/services/sync_service/sync.py",
+            "line": 183,
+            "repeat": false,
+            "calls": [
+              {
+                "function": "resolve_sync_account_id",
+                "file": "src/services/sync_service/sync.py",
+                "line": 120,
+                "repeat": false,
+                "calls": []
+              },
+              {
+                "function": "_delete_expired_codes",
+                "file": "src/services/sync_service/sync.py",
+                "line": 169,
+                "repeat": false,
+                "calls": []
+              },
+              {
+                "function": "_apply_device_metadata",
+                "file": "src/services/sync_service/sync.py",
+                "line": 92,
+                "repeat": false,
+                "calls": [
+                  {
+                    "function": "_normalize_device_name",
+                    "file": "src/services/sync_service/sync.py",
+                    "line": 72,
+                    "repeat": false,
+                    "calls": []
+                  }
+                ]
+              },
+              {
+                "function": "_generate_code",
+                "file": "src/services/sync_service/sync.py",
+                "line": 179,
+                "repeat": false,
+                "calls": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/categories/create",
+      "size": 6,
+      "truncated": false,
+      "entry": {
+        "function": "create_category_route",
+        "file": "src/controller/category_controller.py",
+        "line": 119,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "resolve_sync_account_id",
+            "file": "src/services/sync_service/sync.py",
+            "line": 120,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "is_categorization_enabled",
+            "file": "src/services/category_service/category.py",
+            "line": 60,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "_get_tier",
+            "file": "src/controller/category_controller.py",
+            "line": 60,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "create_category",
+            "file": "src/services/category_service/category.py",
+            "line": 235,
+            "repeat": false,
+            "calls": [
+              {
+                "function": "count_categories",
+                "file": "src/services/category_service/category.py",
+                "line": 217,
+                "repeat": false,
+                "calls": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/search-stream",
+      "size": 6,
+      "truncated": false,
+      "entry": {
+        "function": "search_stream",
+        "file": "src/controller/core_controller.py",
+        "line": 327,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "resolve_sync_account_id",
+            "file": "src/services/sync_service/sync.py",
+            "line": 120,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "_annotate_source_browser",
+            "file": "src/controller/core_controller.py",
+            "line": 69,
+            "repeat": false,
+            "calls": [
+              {
+                "function": "get_device_names",
+                "file": "src/services/sync_service/sync.py",
+                "line": 534,
+                "repeat": false,
+                "calls": []
+              }
+            ]
+          },
+          {
+            "function": "persist_search",
+            "file": "src/services/search_history_service/search_history.py",
+            "line": 22,
+            "repeat": false,
+            "calls": [
+              {
+                "function": "_trim_to_cap",
+                "file": "src/services/search_history_service/search_history.py",
+                "line": 60,
+                "repeat": false,
+                "calls": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "DELETE /v1/user/history",
+      "size": 4,
+      "truncated": false,
+      "entry": {
+        "function": "clear_history_route",
+        "file": "src/controller/core_controller.py",
+        "line": 480,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "resolve_sync_account_id",
+            "file": "src/services/sync_service/sync.py",
+            "line": 120,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "resolve_history_clear_range",
+            "file": "src/services/privacy_service/privacy.py",
+            "line": 37,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "clear_history",
+            "file": "src/services/privacy_service/privacy.py",
+            "line": 45,
+            "repeat": false,
+            "calls": []
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/categories/pages",
+      "size": 4,
+      "truncated": false,
+      "entry": {
+        "function": "list_categorized_pages_route",
+        "file": "src/controller/category_controller.py",
+        "line": 95,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "resolve_sync_account_id",
+            "file": "src/services/sync_service/sync.py",
+            "line": 120,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "list_categorized_pages",
+            "file": "src/services/category_service/category.py",
+            "line": 313,
+            "repeat": false,
+            "calls": [
+              {
+                "function": "list_categories",
+                "file": "src/services/category_service/category.py",
+                "line": 163,
+                "repeat": false,
+                "calls": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/search",
+      "size": 4,
+      "truncated": false,
+      "entry": {
+        "function": "search",
+        "file": "src/controller/core_controller.py",
+        "line": 281,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "resolve_sync_account_id",
+            "file": "src/services/sync_service/sync.py",
+            "line": 120,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "_annotate_source_browser",
+            "file": "src/controller/core_controller.py",
+            "line": 69,
+            "repeat": false,
+            "calls": [
+              {
+                "function": "get_device_names",
+                "file": "src/services/sync_service/sync.py",
+                "line": 534,
+                "repeat": false,
+                "calls": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/sync/devices/rename",
+      "size": 4,
+      "truncated": false,
+      "entry": {
+        "function": "rename_device_route",
+        "file": "src/controller/sync_controller.py",
+        "line": 148,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "rename_device",
+            "file": "src/services/sync_service/sync.py",
+            "line": 452,
+            "repeat": false,
+            "calls": [
+              {
+                "function": "_normalize_device_name",
+                "file": "src/services/sync_service/sync.py",
+                "line": 72,
+                "repeat": false,
+                "calls": []
+              },
+              {
+                "function": "_serialize_device",
+                "file": "src/services/sync_service/sync.py",
+                "line": 421,
+                "repeat": false,
+                "calls": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/sync/devices/unlink",
+      "size": 4,
+      "truncated": false,
+      "entry": {
+        "function": "unlink_device_route",
+        "file": "src/controller/sync_controller.py",
+        "line": 172,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "unlink_device",
+            "file": "src/services/sync_service/sync.py",
+            "line": 498,
+            "repeat": false,
+            "calls": [
+              {
+                "function": "unlink",
+                "file": "src/services/sync_service/sync.py",
+                "line": 371,
+                "repeat": false,
+                "calls": [
+                  {
+                    "function": "_set_sync_account",
+                    "file": "src/services/sync_service/sync.py",
+                    "line": 155,
+                    "repeat": false,
+                    "calls": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "DELETE /v1/categories/{category_id}",
+      "size": 3,
+      "truncated": false,
+      "entry": {
+        "function": "delete_category_route",
+        "file": "src/controller/category_controller.py",
+        "line": 170,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "resolve_sync_account_id",
+            "file": "src/services/sync_service/sync.py",
+            "line": 120,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "delete_category",
+            "file": "src/services/category_service/category.py",
+            "line": 251,
+            "repeat": false,
+            "calls": []
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "DELETE /v1/user/data",
+      "size": 3,
+      "truncated": false,
+      "entry": {
+        "function": "clear_all_data_route",
+        "file": "src/controller/core_controller.py",
+        "line": 524,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "resolve_sync_account_id",
+            "file": "src/services/sync_service/sync.py",
+            "line": 120,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "clear_all_data",
+            "file": "src/services/privacy_service/privacy.py",
+            "line": 63,
+            "repeat": false,
+            "calls": []
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "GET /v1/admin/accounts",
+      "size": 3,
+      "truncated": false,
+      "entry": {
+        "function": "list_accounts_route",
+        "file": "src/controller/admin_controller.py",
+        "line": 471,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "_page_metrics",
+            "file": "src/controller/admin_controller.py",
+            "line": 564,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "_activity_scores",
+            "file": "src/controller/admin_controller.py",
+            "line": 598,
+            "repeat": false,
+            "calls": []
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/admin/accounts/{sync_account_id}/clear-data",
+      "size": 3,
+      "truncated": false,
+      "entry": {
+        "function": "admin_clear_data_route",
+        "file": "src/controller/admin_controller.py",
+        "line": 826,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "clear_history",
+            "file": "src/services/privacy_service/privacy.py",
+            "line": 45,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "clear_all_data",
+            "file": "src/services/privacy_service/privacy.py",
+            "line": 63,
+            "repeat": false,
+            "calls": []
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/admin/accounts/{sync_account_id}/unlink-browser",
+      "size": 3,
+      "truncated": false,
+      "entry": {
+        "function": "admin_unlink_browser_route",
+        "file": "src/controller/admin_controller.py",
+        "line": 793,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "unlink",
+            "file": "src/services/sync_service/sync.py",
+            "line": 371,
+            "repeat": false,
+            "calls": [
+              {
+                "function": "_set_sync_account",
+                "file": "src/services/sync_service/sync.py",
+                "line": 155,
+                "repeat": false,
+                "calls": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/admin/login",
+      "size": 3,
+      "truncated": false,
+      "entry": {
+        "function": "login_route",
+        "file": "src/controller/admin_controller.py",
+        "line": 79,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "verify_admin",
+            "file": "src/services/admin_service/admin.py",
+            "line": 25,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "create_token",
+            "file": "src/services/admin_service/admin.py",
+            "line": 40,
+            "repeat": false,
+            "calls": []
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/categories/disable",
+      "size": 3,
+      "truncated": false,
+      "entry": {
+        "function": "disable_route",
+        "file": "src/controller/category_controller.py",
+        "line": 201,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "resolve_sync_account_id",
+            "file": "src/services/sync_service/sync.py",
+            "line": 120,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "disable_categorization",
+            "file": "src/services/category_service/category.py",
+            "line": 107,
+            "repeat": false,
+            "calls": []
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/categories/search-analytics",
+      "size": 3,
+      "truncated": false,
+      "entry": {
+        "function": "search_analytics_route",
+        "file": "src/controller/category_controller.py",
+        "line": 107,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "resolve_sync_account_id",
+            "file": "src/services/sync_service/sync.py",
+            "line": 120,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "get_search_category_analytics",
+            "file": "src/services/category_service/category.py",
+            "line": 359,
+            "repeat": false,
+            "calls": []
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/categories/{category_id}/update",
+      "size": 3,
+      "truncated": false,
+      "entry": {
+        "function": "update_category_route",
+        "file": "src/controller/category_controller.py",
+        "line": 146,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "resolve_sync_account_id",
+            "file": "src/services/sync_service/sync.py",
+            "line": 120,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "update_category_description",
+            "file": "src/services/category_service/category.py",
+            "line": 283,
+            "repeat": false,
+            "calls": []
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/recent-searches",
+      "size": 3,
+      "truncated": false,
+      "entry": {
+        "function": "recent_searches_route",
+        "file": "src/controller/core_controller.py",
+        "line": 461,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "resolve_sync_account_id",
+            "file": "src/services/sync_service/sync.py",
+            "line": 120,
+            "repeat": false,
+            "calls": []
+          },
+          {
+            "function": "get_recent_searches",
+            "file": "src/services/search_history_service/search_history.py",
+            "line": 74,
+            "repeat": false,
+            "calls": []
+          }
+        ]
+      }
+    },
+    {
+      "kind": "route",
+      "label": "POST /v1/sync/devices",
+      "size": 3,
+      "truncated": false,
+      "entry": {
+        "function": "list_devices_route",
+        "file": "src/controller/sync_controller.py",
+        "line": 135,
+        "repeat": false,
+        "calls": [
+          {
+            "function": "list_devices",
+            "file": "src/services/sync_service/sync.py",
+            "line": 434,
+            "repeat": false,
+            "calls": [
+              {
+                "function": "_serialize_device",
+                "file": "src/services/sync_service/sync.py",
+                "line": 421,
+                "repeat": false,
+                "calls": []
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "callgraph": {
+    "functions": 338,
+    "edges": 241,
+    "unparsed_files": []
+  },
+  "layers": {
+    "entry": [
+      "src/controller/main_controller.py"
+    ],
+    "core": [
+      "src/celery_app.py",
+      "src/controller/admin_controller.py",
+      "src/controller/category_controller.py",
+      "src/controller/core_controller.py",
+      "src/controller/sync_controller.py",
+      "src/db/models.py",
+      "src/db/session.py",
+      "src/handlers/llm_exception_handler.py",
+      "src/handlers/mappers/__init__.py",
+      "src/handlers/mappers/gemini_mapper.py",
+      "src/handlers/mappers/openai_mapper.py",
+      "src/handlers/mappers/redis_mapper.py",
+      "src/handlers/redis_exception_handler.py",
+      "src/services/admin_service/admin.py",
+      "src/services/category_service/category.py",
+      "src/services/classification_service/classify.py",
+      "src/services/classification_service/tasks.py",
+      "src/services/core_service/fast_search.py",
+      "src/services/core_service/main.py",
+      "src/services/core_service/rag.py",
+      "src/services/ingestion_service/ingestion.py",
+      "src/services/llm_service/llm_provider.py",
+      "src/services/llm_service/prompt_builder.py",
+      "src/services/post_processing_service/post_processing.py",
+      "src/services/privacy_service/privacy.py",
+      "src/services/search_history_service/search_history.py",
+      "src/services/sync_service/sync.py",
+      "src/utility/db_log_handler.py",
+      "src/utility/logger.py",
+      "src/utility/path_finder.py",
+      "src/utility/provider.py",
+      "src/utility/token_usage_callback.py",
+      "src/utility/utils.py"
+    ],
+    "leaf": [
+      "src/db/base.py",
+      "src/handlers/mappers/base_mapper.py",
+      "src/models/ai_models.py",
+      "src/models/core.py",
+      "src/utility/pricing.py",
+      "src/utility/settings.py"
+    ]
+  },
+  "first_files": [
+    {
+      "path": "src/controller/main_controller.py",
+      "reason": "Primary entry point into the application",
+      "score": 87.0
+    },
+    {
+      "path": "src/controller/core_controller.py",
+      "reason": "Core logic file referenced by multiple execution paths",
+      "score": 27.0
+    },
+    {
+      "path": "src/controller/admin_controller.py",
+      "reason": "Core logic file referenced by multiple execution paths",
+      "score": 19.5
+    },
+    {
+      "path": "src/controller/category_controller.py",
+      "reason": "Core logic file referenced by multiple execution paths",
+      "score": 10.5
+    },
+    {
+      "path": "src/services/core_service/main.py",
+      "reason": "Core logic file referenced by multiple execution paths",
+      "score": 7.5
+    },
+    {
+      "path": "scripts/cleanup_test_data.py",
+      "reason": "Primary entry point into the application",
+      "score": 6.0
+    },
+    {
+      "path": "scripts/create_admin.py",
+      "reason": "Primary entry point into the application",
+      "score": 6.0
+    },
+    {
+      "path": "src/services/classification_service/tasks.py",
+      "reason": "Core logic file referenced by multiple execution paths",
+      "score": 6.0
+    },
+    {
+      "path": "src/services/ingestion_service/ingestion.py",
+      "reason": "Core logic file referenced by multiple execution paths",
+      "score": 6.0
+    },
+    {
+      "path": "src/controller/sync_controller.py",
+      "reason": "Core logic file referenced by multiple execution paths",
+      "score": 4.5
+    }
+  ],
+  "hotspots": [
+    {
+      "file": "src/utility/logger.py",
+      "score": 65.5,
+      "fan_in": 18,
+      "fan_out": 2,
+      "depth": 1,
+      "layer": "core"
+    },
+    {
+      "file": "src/utility/settings.py",
+      "score": 62.5,
+      "fan_in": 20,
+      "fan_out": 0,
+      "depth": 1,
+      "layer": "leaf"
+    },
+    {
+      "file": "src/db/models.py",
+      "score": 50.0,
+      "fan_in": 13,
+      "fan_out": 2,
+      "depth": 2,
+      "layer": "core"
+    },
+    {
+      "file": "src/db/session.py",
+      "score": 38.5,
+      "fan_in": 9,
+      "fan_out": 1,
+      "depth": 1,
+      "layer": "core"
+    },
+    {
+      "file": "src/controller/core_controller.py",
+      "score": 37.5,
+      "fan_in": 2,
+      "fan_out": 10,
+      "depth": 1,
+      "layer": "core"
+    },
+    {
+      "file": "src/utility/provider.py",
+      "score": 35.0,
+      "fan_in": 8,
+      "fan_out": 3,
+      "depth": 2,
+      "layer": "core"
+    },
+    {
+      "file": "src/services/llm_service/llm_provider.py",
+      "score": 28.5,
+      "fan_in": 6,
+      "fan_out": 3,
+      "depth": 3,
+      "layer": "core"
+    },
+    {
+      "file": "src/controller/admin_controller.py",
+      "score": 26.5,
+      "fan_in": 1,
+      "fan_out": 11,
+      "depth": 1,
+      "layer": "core"
+    },
+    {
+      "file": "src/models/core.py",
+      "score": 26.0,
+      "fan_in": 8,
+      "fan_out": 0,
+      "depth": 2,
+      "layer": "leaf"
+    },
+    {
+      "file": "src/services/sync_service/sync.py",
+      "score": 26.0,
+      "fan_in": 5,
+      "fan_out": 4,
+      "depth": 2,
+      "layer": "core"
+    },
+    {
+      "file": "src/handlers/mappers/__init__.py",
+      "score": 22.5,
+      "fan_in": 2,
+      "fan_out": 4,
+      "depth": 3,
+      "layer": "core"
+    },
+    {
+      "file": "src/handlers/llm_exception_handler.py",
+      "score": 20.0,
+      "fan_in": 1,
+      "fan_out": 1,
+      "depth": 2,
+      "layer": "core"
+    },
+    {
+      "file": "src/services/category_service/category.py",
+      "score": 20.0,
+      "fan_in": 3,
+      "fan_out": 2,
+      "depth": 2,
+      "layer": "core"
+    },
+    {
+      "file": "src/services/ingestion_service/ingestion.py",
+      "score": 19.0,
+      "fan_in": 2,
+      "fan_out": 8,
+      "depth": 2,
+      "layer": "core"
+    },
+    {
+      "file": "src/controller/category_controller.py",
+      "score": 18.5,
+      "fan_in": 1,
+      "fan_out": 9,
+      "depth": 1,
+      "layer": "core"
+    },
+    {
+      "file": "src/services/core_service/main.py",
+      "score": 18.0,
+      "fan_in": 1,
+      "fan_out": 9,
+      "depth": 2,
+      "layer": "core"
+    },
+    {
+      "file": "src/utility/db_log_handler.py",
+      "score": 17.5,
+      "fan_in": 2,
+      "fan_out": 1,
+      "depth": 1,
+      "layer": "core"
+    },
+    {
+      "file": "src/celery_app.py",
+      "score": 17.0,
+      "fan_in": 2,
+      "fan_out": 1,
+      "depth": 2,
+      "layer": "core"
+    },
+    {
+      "file": "src/services/privacy_service/privacy.py",
+      "score": 17.0,
+      "fan_in": 2,
+      "fan_out": 1,
+      "depth": 2,
+      "layer": "core"
+    },
+    {
+      "file": "src/services/llm_service/prompt_builder.py",
+      "score": 16.5,
+      "fan_in": 2,
+      "fan_out": 1,
+      "depth": 3,
+      "layer": "core"
+    }
+  ],
+  "caution_areas": [
+    {
+      "path": "src/controller/admin_controller.py",
+      "category": "large_file",
+      "severity": 4,
+      "description": "849 lines of code; 8 except blocks that neither log nor re-raise; imports 11 project files",
+      "metrics": {
+        "size": 849,
+        "observability": 8,
+        "coupling": 11
+      },
+      "score": 76.4,
+      "partial": false,
+      "factors": [
+        {
+          "name": "size",
+          "value": 849,
+          "contribution": 0.568,
+          "estimated": false
+        },
+        {
+          "name": "observability",
+          "value": 8,
+          "contribution": 0.4,
+          "estimated": false
+        },
+        {
+          "name": "coupling",
+          "value": 11,
+          "contribution": 0.088,
+          "estimated": false
+        }
+      ]
+    },
+    {
+      "path": "src/services/ingestion_service/ingestion.py",
+      "category": "high_complexity",
+      "severity": 4,
+      "description": "A function with complexity 25; 508 lines of code; 3 except blocks that neither log nor re-raise",
+      "metrics": {
+        "complexity": 25.0,
+        "size": 508,
+        "observability": 3
+      },
+      "score": 70.9,
+      "partial": false,
+      "factors": [
+        {
+          "name": "complexity",
+          "value": 25.0,
+          "contribution": 0.525,
+          "estimated": false
+        },
+        {
+          "name": "size",
+          "value": 508,
+          "contribution": 0.269,
+          "estimated": false
+        },
+        {
+          "name": "observability",
+          "value": 3,
+          "contribution": 0.16,
+          "estimated": false
+        }
+      ]
+    },
+    {
+      "path": "src/utility/settings.py",
+      "category": "high_impact",
+      "severity": 3,
+      "description": "Imported by 20 files; 251 lines of code",
+      "metrics": {
+        "impact": 20,
+        "size": 251
+      },
+      "score": 51.5,
+      "partial": false,
+      "factors": [
+        {
+          "name": "impact",
+          "value": 20,
+          "contribution": 0.492,
+          "estimated": false
+        },
+        {
+          "name": "size",
+          "value": 251,
+          "contribution": 0.045,
+          "estimated": false
+        }
+      ]
+    },
+    {
+      "path": "src/services/core_service/rag.py",
+      "category": "large_file",
+      "severity": 3,
+      "description": "596 lines of code; a function with complexity 15",
+      "metrics": {
+        "size": 596,
+        "complexity": 15.0
+      },
+      "score": 46.1,
+      "partial": false,
+      "factors": [
+        {
+          "name": "size",
+          "value": 596,
+          "contribution": 0.346,
+          "estimated": false
+        },
+        {
+          "name": "complexity",
+          "value": 15.0,
+          "contribution": 0.175,
+          "estimated": false
+        }
+      ]
+    },
+    {
+      "path": "src/utility/logger.py",
+      "category": "high_impact",
+      "severity": 3,
+      "description": "Imported by 18 files",
+      "metrics": {
+        "impact": 18
+      },
+      "score": 43.1,
+      "partial": false,
+      "factors": [
+        {
+          "name": "impact",
+          "value": 18,
+          "contribution": 0.431,
+          "estimated": false
+        }
+      ]
+    },
+    {
+      "path": "src/services/sync_service/sync.py",
+      "category": "large_file",
+      "severity": 3,
+      "description": "602 lines of code; 2 except blocks that neither log nor re-raise; imported by 5 files",
+      "metrics": {
+        "size": 602,
+        "observability": 2,
+        "impact": 5
+      },
+      "score": 42.2,
+      "partial": false,
+      "factors": [
+        {
+          "name": "size",
+          "value": 602,
+          "contribution": 0.352,
+          "estimated": false
+        },
+        {
+          "name": "observability",
+          "value": 2,
+          "contribution": 0.08,
+          "estimated": false
+        },
+        {
+          "name": "impact",
+          "value": 5,
+          "contribution": 0.031,
+          "estimated": false
+        }
+      ]
+    }
+  ],
+  "cycles": [],
+  "graph": {
+    "nodes": [
+      "config/__init__.py",
+      "migrations/env.py",
+      "migrations/versions/0001_init_pgvector.py",
+      "migrations/versions/0002_heading_sections.py",
+      "migrations/versions/0003_pages_sections.py",
+      "migrations/versions/0004_search_history.py",
+      "migrations/versions/0005_hash_indexes.py",
+      "migrations/versions/0006_bookmark_heading_path_cleanup.py",
+      "migrations/versions/0007_source_browser_uuid.py",
+      "migrations/versions/0008_admin_users.py",
+      "migrations/versions/0009_app_logs.py",
+      "migrations/versions/0010_llm_usage.py",
+      "migrations/versions/0011_search_history_duration.py",
+      "migrations/versions/0012_last_synced_browser_uuid.py",
+      "migrations/versions/0013_linked_browser_names.py",
+      "migrations/versions/0014_search_history_mode.py",
+      "migrations/versions/0015_categorization.py",
+      "migrations/versions/0016_categorization_refresh_cooldown.py",
+      "migrations/versions/0017_categorization_refresh_count.py",
+      "scripts/cleanup_test_data.py",
+      "scripts/create_admin.py",
+      "src/__init__.py",
+      "src/celery_app.py",
+      "src/controller/__init__.py",
+      "src/controller/admin_controller.py",
+      "src/controller/category_controller.py",
+      "src/controller/core_controller.py",
+      "src/controller/main_controller.py",
+      "src/controller/sync_controller.py",
+      "src/db/__init__.py",
+      "src/db/base.py",
+      "src/db/models.py",
+      "src/db/session.py",
+      "src/handlers/__init__.py",
+      "src/handlers/llm_exception_handler.py",
+      "src/handlers/mappers/__init__.py",
+      "src/handlers/mappers/base_mapper.py",
+      "src/handlers/mappers/gemini_mapper.py",
+      "src/handlers/mappers/openai_mapper.py",
+      "src/handlers/mappers/redis_mapper.py",
+      "src/handlers/redis_exception_handler.py",
+      "src/models/__init__.py",
+      "src/models/ai_models.py",
+      "src/models/core.py",
+      "src/services/admin_service/__init__.py",
+      "src/services/admin_service/admin.py",
+      "src/services/category_service/__init__.py",
+      "src/services/category_service/category.py",
+      "src/services/classification_service/__init__.py",
+      "src/services/classification_service/classify.py",
+      "src/services/classification_service/tasks.py",
+      "src/services/core_service/__init__.py",
+      "src/services/core_service/fast_search.py",
+      "src/services/core_service/main.py",
+      "src/services/core_service/rag.py",
+      "src/services/ingestion_service/__init__.py",
+      "src/services/ingestion_service/ingestion.py",
+      "src/services/llm_service/__init__.py",
+      "src/services/llm_service/llm_provider.py",
+      "src/services/llm_service/prompt_builder.py",
+      "src/services/post_processing_service/__init__.py",
+      "src/services/post_processing_service/post_processing.py",
+      "src/services/privacy_service/__init__.py",
+      "src/services/privacy_service/privacy.py",
+      "src/services/search_history_service/__init__.py",
+      "src/services/search_history_service/search_history.py",
+      "src/services/sync_service/__init__.py",
+      "src/services/sync_service/sync.py",
+      "src/utility/__init__.py",
+      "src/utility/db_log_handler.py",
+      "src/utility/logger.py",
+      "src/utility/path_finder.py",
+      "src/utility/pricing.py",
+      "src/utility/provider.py",
+      "src/utility/settings.py",
+      "src/utility/token_usage_callback.py",
+      "src/utility/utils.py"
+    ],
+    "edges": [
+      {
+        "source": "migrations/env.py",
+        "target": "src/db/base.py",
+        "deferred": false
+      },
+      {
+        "source": "migrations/env.py",
+        "target": "src/db/models.py",
+        "deferred": false
+      },
+      {
+        "source": "migrations/env.py",
+        "target": "src/utility/provider.py",
+        "deferred": false
+      },
+      {
+        "source": "migrations/versions/0001_init_pgvector.py",
+        "target": "src/utility/provider.py",
+        "deferred": false
+      },
+      {
+        "source": "migrations/versions/0003_pages_sections.py",
+        "target": "src/utility/provider.py",
+        "deferred": false
+      },
+      {
+        "source": "scripts/cleanup_test_data.py",
+        "target": "src/db/models.py",
+        "deferred": false
+      },
+      {
+        "source": "scripts/cleanup_test_data.py",
+        "target": "src/db/session.py",
+        "deferred": false
+      },
+      {
+        "source": "scripts/create_admin.py",
+        "target": "src/db/models.py",
+        "deferred": false
+      },
+      {
+        "source": "scripts/create_admin.py",
+        "target": "src/db/session.py",
+        "deferred": false
+      },
+      {
+        "source": "src/celery_app.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/admin_controller.py",
+        "target": "src/controller/core_controller.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/admin_controller.py",
+        "target": "src/db/models.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/admin_controller.py",
+        "target": "src/db/session.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/admin_controller.py",
+        "target": "src/models/core.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/admin_controller.py",
+        "target": "src/services/admin_service/admin.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/admin_controller.py",
+        "target": "src/services/category_service/category.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/admin_controller.py",
+        "target": "src/services/privacy_service/privacy.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/admin_controller.py",
+        "target": "src/services/sync_service/sync.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/admin_controller.py",
+        "target": "src/utility/logger.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/admin_controller.py",
+        "target": "src/utility/pricing.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/admin_controller.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/category_controller.py",
+        "target": "src/celery_app.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/category_controller.py",
+        "target": "src/db/models.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/category_controller.py",
+        "target": "src/db/session.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/category_controller.py",
+        "target": "src/models/core.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/category_controller.py",
+        "target": "src/services/category_service/category.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/category_controller.py",
+        "target": "src/services/classification_service/tasks.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/category_controller.py",
+        "target": "src/services/sync_service/sync.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/category_controller.py",
+        "target": "src/utility/logger.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/category_controller.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/core_controller.py",
+        "target": "src/db/session.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/core_controller.py",
+        "target": "src/handlers/llm_exception_handler.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/core_controller.py",
+        "target": "src/handlers/redis_exception_handler.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/core_controller.py",
+        "target": "src/models/core.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/core_controller.py",
+        "target": "src/services/core_service/main.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/core_controller.py",
+        "target": "src/services/ingestion_service/ingestion.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/core_controller.py",
+        "target": "src/services/privacy_service/privacy.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/core_controller.py",
+        "target": "src/services/search_history_service/search_history.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/core_controller.py",
+        "target": "src/services/sync_service/sync.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/core_controller.py",
+        "target": "src/utility/logger.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/main_controller.py",
+        "target": "src/controller/admin_controller.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/main_controller.py",
+        "target": "src/controller/category_controller.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/main_controller.py",
+        "target": "src/controller/core_controller.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/main_controller.py",
+        "target": "src/controller/sync_controller.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/main_controller.py",
+        "target": "src/db/session.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/main_controller.py",
+        "target": "src/utility/db_log_handler.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/main_controller.py",
+        "target": "src/utility/logger.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/main_controller.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/sync_controller.py",
+        "target": "src/db/session.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/sync_controller.py",
+        "target": "src/models/core.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/sync_controller.py",
+        "target": "src/services/sync_service/sync.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/sync_controller.py",
+        "target": "src/utility/logger.py",
+        "deferred": false
+      },
+      {
+        "source": "src/controller/sync_controller.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/db/models.py",
+        "target": "src/db/base.py",
+        "deferred": false
+      },
+      {
+        "source": "src/db/models.py",
+        "target": "src/utility/provider.py",
+        "deferred": false
+      },
+      {
+        "source": "src/db/session.py",
+        "target": "src/utility/provider.py",
+        "deferred": false
+      },
+      {
+        "source": "src/handlers/llm_exception_handler.py",
+        "target": "src/handlers/mappers/__init__.py",
+        "deferred": false
+      },
+      {
+        "source": "src/handlers/mappers/__init__.py",
+        "target": "src/handlers/mappers/base_mapper.py",
+        "deferred": false
+      },
+      {
+        "source": "src/handlers/mappers/__init__.py",
+        "target": "src/handlers/mappers/gemini_mapper.py",
+        "deferred": false
+      },
+      {
+        "source": "src/handlers/mappers/__init__.py",
+        "target": "src/handlers/mappers/openai_mapper.py",
+        "deferred": false
+      },
+      {
+        "source": "src/handlers/mappers/__init__.py",
+        "target": "src/handlers/mappers/redis_mapper.py",
+        "deferred": false
+      },
+      {
+        "source": "src/handlers/mappers/gemini_mapper.py",
+        "target": "src/handlers/mappers/base_mapper.py",
+        "deferred": false
+      },
+      {
+        "source": "src/handlers/mappers/openai_mapper.py",
+        "target": "src/handlers/mappers/base_mapper.py",
+        "deferred": false
+      },
+      {
+        "source": "src/handlers/mappers/redis_mapper.py",
+        "target": "src/handlers/mappers/base_mapper.py",
+        "deferred": false
+      },
+      {
+        "source": "src/handlers/redis_exception_handler.py",
+        "target": "src/handlers/mappers/__init__.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/admin_service/admin.py",
+        "target": "src/db/models.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/admin_service/admin.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/category_service/category.py",
+        "target": "src/db/models.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/category_service/category.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/classification_service/classify.py",
+        "target": "src/services/llm_service/llm_provider.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/classification_service/classify.py",
+        "target": "src/utility/logger.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/classification_service/classify.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/classification_service/tasks.py",
+        "target": "src/celery_app.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/classification_service/tasks.py",
+        "target": "src/db/models.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/classification_service/tasks.py",
+        "target": "src/db/session.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/classification_service/tasks.py",
+        "target": "src/services/category_service/category.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/classification_service/tasks.py",
+        "target": "src/services/classification_service/classify.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/classification_service/tasks.py",
+        "target": "src/services/llm_service/llm_provider.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/classification_service/tasks.py",
+        "target": "src/utility/logger.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/classification_service/tasks.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/core_service/fast_search.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/core_service/main.py",
+        "target": "src/db/models.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/core_service/main.py",
+        "target": "src/models/core.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/core_service/main.py",
+        "target": "src/services/core_service/fast_search.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/core_service/main.py",
+        "target": "src/services/core_service/rag.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/core_service/main.py",
+        "target": "src/services/llm_service/llm_provider.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/core_service/main.py",
+        "target": "src/services/post_processing_service/post_processing.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/core_service/main.py",
+        "target": "src/services/sync_service/sync.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/core_service/main.py",
+        "target": "src/utility/logger.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/core_service/main.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/core_service/rag.py",
+        "target": "src/models/core.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/core_service/rag.py",
+        "target": "src/services/llm_service/llm_provider.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/core_service/rag.py",
+        "target": "src/services/llm_service/prompt_builder.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/core_service/rag.py",
+        "target": "src/utility/logger.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/core_service/rag.py",
+        "target": "src/utility/provider.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/core_service/rag.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/core_service/rag.py",
+        "target": "src/utility/token_usage_callback.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/ingestion_service/ingestion.py",
+        "target": "src/db/models.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/ingestion_service/ingestion.py",
+        "target": "src/models/ai_models.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/ingestion_service/ingestion.py",
+        "target": "src/models/core.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/ingestion_service/ingestion.py",
+        "target": "src/services/llm_service/llm_provider.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/ingestion_service/ingestion.py",
+        "target": "src/services/llm_service/prompt_builder.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/ingestion_service/ingestion.py",
+        "target": "src/utility/logger.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/ingestion_service/ingestion.py",
+        "target": "src/utility/provider.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/ingestion_service/ingestion.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/llm_service/llm_provider.py",
+        "target": "src/utility/logger.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/llm_service/llm_provider.py",
+        "target": "src/utility/provider.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/llm_service/llm_provider.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/llm_service/prompt_builder.py",
+        "target": "src/utility/utils.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/post_processing_service/post_processing.py",
+        "target": "src/models/core.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/post_processing_service/post_processing.py",
+        "target": "src/services/llm_service/llm_provider.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/post_processing_service/post_processing.py",
+        "target": "src/utility/logger.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/post_processing_service/post_processing.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/post_processing_service/post_processing.py",
+        "target": "src/utility/token_usage_callback.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/post_processing_service/post_processing.py",
+        "target": "src/utility/utils.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/privacy_service/privacy.py",
+        "target": "src/db/models.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/search_history_service/search_history.py",
+        "target": "src/db/models.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/search_history_service/search_history.py",
+        "target": "src/db/session.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/search_history_service/search_history.py",
+        "target": "src/utility/logger.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/search_history_service/search_history.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/sync_service/sync.py",
+        "target": "src/db/models.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/sync_service/sync.py",
+        "target": "src/services/ingestion_service/ingestion.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/sync_service/sync.py",
+        "target": "src/utility/logger.py",
+        "deferred": false
+      },
+      {
+        "source": "src/services/sync_service/sync.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/utility/db_log_handler.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/utility/logger.py",
+        "target": "src/utility/db_log_handler.py",
+        "deferred": true
+      },
+      {
+        "source": "src/utility/logger.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/utility/path_finder.py",
+        "target": "src/utility/logger.py",
+        "deferred": false
+      },
+      {
+        "source": "src/utility/provider.py",
+        "target": "src/utility/logger.py",
+        "deferred": false
+      },
+      {
+        "source": "src/utility/provider.py",
+        "target": "src/utility/path_finder.py",
+        "deferred": false
+      },
+      {
+        "source": "src/utility/provider.py",
+        "target": "src/utility/settings.py",
+        "deferred": false
+      },
+      {
+        "source": "src/utility/token_usage_callback.py",
+        "target": "src/utility/logger.py",
+        "deferred": false
+      },
+      {
+        "source": "src/utility/utils.py",
+        "target": "src/utility/logger.py",
+        "deferred": false
+      },
+      {
+        "source": "src/utility/utils.py",
+        "target": "src/utility/path_finder.py",
+        "deferred": false
+      }
+    ]
+  },
+  "stats": {
+    "files": 77,
+    "entry_points": 3,
+    "routes": 41,
+    "reachable_files": 40,
+    "edges": 134,
+    "cycles_import_time": 0,
+    "cycles_deferred": 0
+  }
+}
