@@ -1,6 +1,6 @@
 # SurfMind Backend
 
-![Version](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmohdzain98%2Fsurfmind-backend%2Fmain%2Fpyproject.toml&query=%24.project.version&label=version&color=blue)
+![Version](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmohdzain98%2Fsurfmind-backend%2Fmain%2Fpyproject.toml&query=%24.project.version&label=version&color=blue) [![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-orange)](LICENSE)
 
 FastAPI service for SurfMind's retrieval pipeline. It accepts browser history
 and bookmark payloads, caches them in Redis, persists them to Postgres with
@@ -77,17 +77,19 @@ Health checks:
 
 Shortcuts for the commands above:
 
-| Target | Runs |
-|---|---|
-| `make venv` | `python3.11 -m venv .venv` |
-| `make install` | `pip install -r requirements.txt` |
-| `make migrate` | `alembic upgrade head` |
-| `make run` | `uvicorn ... --reload --host 0.0.0.0 --port 8000` |
+| Target                       | Runs                                               |
+| ---------------------------- | -------------------------------------------------- |
+| `make venv`                  | `python3.11 -m venv .venv`                         |
+| `make install`               | `pip install -r requirements.txt`                  |
+| `make migrate`               | `alembic upgrade head`                             |
+| `make run`                   | `uvicorn ... --reload --host 0.0.0.0 --port 8000`  |
 | `make admin username=<name>` | `python -m scripts.create_admin --username <name>` |
-| `make format` | `black .` |
-| `make lint` | `ruff check .` |
-| `make check` | `format` + `lint` together |
-| `make clean` | removes `__pycache__` dirs |
+| `make format`                | `black .`                                          |
+| `make lint`                  | `ruff check .`                                     |
+| `make check`                 | `format` + `lint` together                         |
+| `make clean`                 | removes `__pycache__` dirs                         |
+| `make license`               | adds or updates the licence header                 |
+| `make license-check`         | lists missing/outdated headers (exit 1)            |
 
 ## API
 
@@ -173,3 +175,6 @@ safe to run on any server including prod after a load test run there.
   for persisted storage, retrieval, and sync/privacy endpoints.
 - Formatting and linting are configured through the repo root
   `pyproject.toml` (black, ruff). See `CONTRIBUTING.md` for conventions.
+
+## License
+SurfMind Backend is source-available under the PolyForm Noncommercial License 1.0.0. You are welcome to read the code, learn from it, and use it for personal, research, educational and other noncommercial purposes. Commercial use, including running it as a competing product or service, needs a separate license from the author. Contact: <a href="https://surfmind.docschat.in/contact">surfmind.docschat.in</a>

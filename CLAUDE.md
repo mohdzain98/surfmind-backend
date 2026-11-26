@@ -55,7 +55,8 @@ There is no test suite in this repo currently — changes are verified with
 ad-hoc scripts against a real local Postgres/Redis instead.
 
 A `Makefile` wraps the commands above: `make venv`/`install`/`migrate`/
-`run`/`admin username=<name>`/`format`/`lint`/`check`/`clean`.
+`run`/`admin username=<name>`/`format`/`lint`/`check`/`clean`/
+`license` (add the licence header to `.py` files)/`license-check`.
 
 ## Architecture
 
