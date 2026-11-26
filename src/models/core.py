@@ -159,6 +159,13 @@ class SearchResponse(BaseModel):
     format: dict | None = None
     model: str | None = None
     docs: list
+    # Set when the query reads as a task ("summarize this", "make bullet
+    # points") rather than a search — results are still shown, but the UI
+    # should explain the tool only finds pages, it doesn't do the task.
+    notice: str | None = None
+    # Complete server-side time for the search, in milliseconds — set by
+    # the controller once the response is fully built.
+    duration_ms: int | None = None
 
 
 class RecentSearchesRequest(BaseModel):

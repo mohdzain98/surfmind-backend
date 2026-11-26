@@ -1,6 +1,6 @@
 # SurfMind Backend
 
-![Version](https://img.shields.io/badge/version-1.81.0-blue)
+![Version](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmohdzain98%2Fsurfmind-backend%2Fmain%2Fpyproject.toml&query=%24.project.version&label=version&color=blue)
 
 FastAPI service for SurfMind's retrieval pipeline. It accepts browser history
 and bookmark payloads, caches them in Redis, persists them to Postgres with
