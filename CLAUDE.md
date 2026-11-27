@@ -55,7 +55,8 @@ There is no test suite in this repo currently — changes are verified with
 ad-hoc scripts against a real local Postgres/Redis instead.
 
 A `Makefile` wraps the commands above: `make venv`/`install`/`migrate`/
-`run`/`admin username=<name>`/`format`/`lint`/`check`/`clean`.
+`run`/`admin username=<name>`/`format`/`lint`/`check`/`clean`/
+`license` (add the licence header to `.py` files)/`license-check`.
 
 ## Architecture
 
@@ -147,7 +148,9 @@ change that could strand already-"synced" local data (e.g. the Redis-only
 → Postgres migration did) and force one resync — bump it only when that
 kind of change ships. Separately, `APP_VERSION` (read live from
 `pyproject.toml`, also exposed on `/health`) is this backend's own
-semantic version, independent of the frontend's.
+semantic version, independent of the frontend's. `pyproject.toml` is the
+only place to bump it — the README badge reads it dynamically from
+`main` too, so there's no second copy to keep in sync.
 
 ### Retrieval (`src/services/core_service/rag.py`, `main.py`)
 **`HybridRAGService`** splits parent docs (full page content) into

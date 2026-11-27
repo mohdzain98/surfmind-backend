@@ -8,6 +8,39 @@ not a single day's work.
 ## upcoming
 - sensitive data protection
 
+## 2026-11-26 — Task-request notice (1.81.1)
+
+### Added
+- Search responses gained an optional `notice` field (`/v1/search` and
+  the `final` event of standard-mode `/v1/search-stream`). Some users ask
+  SurfMind to *do* something to a page ("make bullet points of this
+  page", "explain what this page says") rather than find one. SurfMind
+  only finds pages, so those users got plain results with no explanation
+  and could reasonably think it had misunderstood them. Such queries now
+  get a fixed, server-written notice explaining what SurfMind does;
+  `null` for normal searches, never set in Fast mode (no LLM step there).
+- Detection is a separate `TaskRequestDetector`
+  (`src/services/task_detection_service/`): Jev's yes/no `Noul` primitive
+  scores the query (task request if probability >= 0.6,
+  `task_detection.threshold` in `config/params.<env>.yml`), with the
+  post-processing LLM answering YES/NO as a fallback if Jev fails, and
+  "plain search" if both fail. It starts at the beginning of the search
+  and runs alongside retrieval, so it adds no wait of its own (~300ms on
+  Jev). Usage is recorded as `use_case="task_detection"` in `llm_usage`.
+- `typesafe-sdk` added to `requirements.txt`.
+- `duration_ms` on search responses (`/v1/search` and the `final` event
+  of `/v1/search-stream`, Fast and Standard): the complete server-side
+  time from request arrival to the final result, so the UI can show how
+  long a search took. The same number is now what the duration log line
+  and `search_history.duration_ms` record (previously measured from
+  stream start, slightly shorter), so the UI and admin metrics agree.
+
+### Changed
+- Version is now defined only in `pyproject.toml`: `/health` already
+  read it from there, and the README badge now reads it too (a dynamic
+  shields.io badge on `main`'s `pyproject.toml`) instead of a hardcoded
+  number. Bumped to `1.81.1`.
+
 ## 2026-11-14 — Fast mode, clear-history ranges, prod retrieval fixes
 
 ### Added

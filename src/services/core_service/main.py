@@ -1,8 +1,13 @@
+# Copyright (c) 2025 Mohd Zain. SurfMind Backend.
+# Licensed under the PolyForm Noncommercial License 1.0.0 (see LICENSE).
+# Commercial use requires a separate license: https://surfmind.docschat.in/contact
+
 """Core retrieval orchestration for SurfMind RAG flows.
 Provides synchronous and streaming pipelines for search.
 Includes a mock streamer to test UI progress handling.
 """
 
+import asyncio
 import time
 from typing import Any, AsyncGenerator, Dict, Generator, List, Optional, Tuple
 
@@ -20,10 +25,19 @@ from src.services.core_service.rag import HybridRAGService, LLMRag
 from src.services.llm_service.llm_provider import LLMProvider
 from src.services.post_processing_service.post_processing import PostProcessing
 from src.services.sync_service.sync import get_device_names
+from src.services.task_detection_service.task_detection import TaskRequestDetector
 from src.utility.logger import AppLogger
 from src.utility.settings import settings
 
 logger = AppLogger.get_logger(__name__)
+
+# Fixed server-side text (the detector only flags a task request, it never
+# writes user-facing copy) so the wording stays consistent and reviewable.
+TASK_REQUEST_NOTICE = (
+    "SurfMind finds pages from your browsing history and bookmarks — it "
+    "can't summarize, rewrite, or make bullet points of a page. Here's what "
+    "it found related to your query."
+)
 
 
 class CoreRetrieval:
@@ -39,6 +53,20 @@ class CoreRetrieval:
         self.post_processing = PostProcessing()
         self.rag = HybridRAGService()
         self.llm_rag = LLMRag()
+        self.task_detector = TaskRequestDetector(llm_provider=self.llm_client)
+
+    def _start_task_detection(self, query: str) -> asyncio.Task:
+        """Kick off task-request detection so it runs alongside retrieval
+        and post-processing instead of adding its own latency."""
+        return asyncio.create_task(self.task_detector.detect(query))
+
+    async def _resolve_notice(
+        self, detection: asyncio.Task, db: AsyncSession, user_id: str
+    ) -> Optional[str]:
+        """Await detection, record its usage, and map it to the notice."""
+        is_task, usage = await detection
+        await self._record_llm_usage(db, user_id, [("task_detection", usage)])
+        return TASK_REQUEST_NOTICE if is_task else None
 
     def _matches_folder(self, item_folder: str, folder: str) -> bool:
         """True if `item_folder` is `folder` itself or nested under it.
@@ -94,7 +122,9 @@ class CoreRetrieval:
 
         return docs
 
-    def _empty_response(self, message: str) -> SearchResponse:
+    def _empty_response(
+        self, message: str, notice: Optional[str] = None
+    ) -> SearchResponse:
         """Create a standardized empty SearchResponse with a message.
         Used when no history or no relevant data is found.
         """
@@ -104,6 +134,7 @@ class CoreRetrieval:
             format=None,
             model=None,
             docs=[],
+            notice=notice,
         )
 
     def _stream_event(self, step: str, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -186,6 +217,7 @@ class CoreRetrieval:
         ques = data.query
         flag = data.flag
         folder = data.folder if flag == "bookmark" else None
+        detection = self._start_task_detection(ques)
         parent_docs = self._build_parent_documents(
             history=history, flag=flag, folder=folder
         )
@@ -206,7 +238,8 @@ class CoreRetrieval:
         )
         if not retrieved_parents:
             logger.warning("No relevant data found")
-            return self._empty_response("No relevant data found")
+            notice = await self._resolve_notice(detection, db, user_id)
+            return self._empty_response("No relevant data found", notice=notice)
         self._print_docs("retrieval output", retrieved_parents)
 
         top_doc = retrieved_parents[0]
@@ -227,15 +260,17 @@ class CoreRetrieval:
         await self._record_llm_usage(
             db, user_id, [("rag", rag_usage), ("post_processing", pp_usage)]
         )
+        notice = await self._resolve_notice(detection, db, user_id)
         if not final_docs:
             logger.warning("No relevant data found after post processing")
-            return self._empty_response("No relevant data found")
+            return self._empty_response("No relevant data found", notice=notice)
         res = SearchResponse(
             success=True,
             result=result,
             format=finalOutput,
             model=model,
             docs=final_docs,
+            notice=notice,
         )
         return res
 
@@ -254,6 +289,7 @@ class CoreRetrieval:
         ques = data.query
         flag = data.flag
         folder = data.folder if flag == "bookmark" else None
+        detection = self._start_task_detection(ques)
         parent_docs = self._build_parent_documents(
             history=history, flag=flag, folder=folder
         )
@@ -273,7 +309,8 @@ class CoreRetrieval:
             {"count": len(retrieved_parents)},
         )
         if not retrieved_parents:
-            res = self._empty_response("No relevant data found")
+            notice = await self._resolve_notice(detection, db, user_id)
+            res = self._empty_response("No relevant data found", notice=notice)
             yield self._stream_event("final", res.dict())
             return
         self._print_docs("retrieval output", retrieved_parents)
@@ -281,13 +318,14 @@ class CoreRetrieval:
         validated_docs, pp_usage = self.post_processing.post_process(
             ques=ques, docs=retrieved_parents
         )
+        notice = await self._resolve_notice(detection, db, user_id)
         self._print_docs("post-processing output", validated_docs)
         yield self._stream_event(
             "post_processing",
             {"validated_docs": len(validated_docs)},
         )
         if len(validated_docs) == 0:
-            res = self._empty_response(message="No relevant data found")
+            res = self._empty_response(message="No relevant data found", notice=notice)
             yield self._stream_event("final", res.dict())
             return
 
@@ -335,6 +373,7 @@ class CoreRetrieval:
             format=final_output,
             model=model,
             docs=validated_docs,
+            notice=notice,
         )
         yield self._stream_event("final", res.model_dump())
 
@@ -354,6 +393,7 @@ class CoreRetrieval:
         before post-processing.
         """
         ques = data.query
+        detection = self._start_task_detection(ques)
         history_docs = self._build_parent_documents(history=history, flag="history")
         bookmark_docs = self._build_parent_documents(
             history=bookmarks, flag="bookmark", folder=data.folder
@@ -395,7 +435,8 @@ class CoreRetrieval:
         self._print_docs("retrieval output (bookmarks)", bookmark_parents)
 
         if not history_parents and not bookmark_parents:
-            res = self._empty_response("No relevant data found")
+            notice = await self._resolve_notice(detection, db, user_id)
+            res = self._empty_response("No relevant data found", notice=notice)
             yield self._stream_event("final", res.dict())
             return
 
@@ -416,6 +457,7 @@ class CoreRetrieval:
 
         validated_history, pp_usage_history = _safe_post_process(history_parents)
         validated_bookmarks, pp_usage_bookmarks = _safe_post_process(bookmark_parents)
+        notice = await self._resolve_notice(detection, db, user_id)
 
         # Merge: history first, then bookmarks (Popup.js re-splits by metadata.type)
         validated_docs = validated_history + validated_bookmarks
@@ -425,7 +467,9 @@ class CoreRetrieval:
         )
 
         if not validated_docs:
-            res = self._empty_response("No relevant data found after filtering")
+            res = self._empty_response(
+                "No relevant data found after filtering", notice=notice
+            )
             yield self._stream_event("final", res.dict())
             return
 
@@ -459,6 +503,7 @@ class CoreRetrieval:
             format=final_output,
             model=model,
             docs=validated_docs,
+            notice=notice,
         )
         yield self._stream_event("final", res.model_dump())
 

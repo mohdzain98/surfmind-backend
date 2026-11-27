@@ -1,3 +1,7 @@
+# Copyright (c) 2025 Mohd Zain. SurfMind Backend.
+# Licensed under the PolyForm Noncommercial License 1.0.0 (see LICENSE).
+# Commercial use requires a separate license: https://surfmind.docschat.in/contact
+
 """Central configuration: environment variables plus `config/params.<env>.yml`.
 
 `Settings` is the single entry point for all tunable config in this app —
@@ -241,6 +245,17 @@ class Settings(BaseSettings):
     def embeddings_fallback_model(self) -> str:
         """Fallback embeddings model (embeddings.fallback.model) — not tier-split."""
         return self._params["embeddings"]["fallback"]["model"]
+
+    @property
+    def task_detection_jev_model(self) -> str:
+        """Jev model for task-request detection (task_detection.jev_model)."""
+        return self._params["task_detection"]["jev_model"]
+
+    @property
+    def task_detection_threshold(self) -> float:
+        """Jev yes-probability at/above which a query counts as a task request
+        (task_detection.threshold)."""
+        return self._params["task_detection"]["threshold"]
 
     @property
     def fast_mode_default_preset(self) -> str:

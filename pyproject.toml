@@ -1,6 +1,7 @@
 [project]
 name = "surfmind-backend"
-version = "1.81.0"
+version = "1.81.1"
+license = { text = "PolyForm-Noncommercial-1.0.0" }
 
 [tool.black]
 line-length = 88
