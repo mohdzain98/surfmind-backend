@@ -4,7 +4,7 @@ What each entry point calls, function by function (Python only). Dotted arrows l
 
 ## `POST /v1/save-data` → `save_data`
 
-`src/controller/core_controller.py:170` · 26 functions · cut short
+`src/controller/core_controller.py:174` · 26 functions · cut short
 
 ```mermaid
 flowchart LR
@@ -66,118 +66,9 @@ flowchart LR
   src_utility_provider_py__EmbeddingsProvider_get_default_embeddings --> src_utility_provider_py__FallbackEmbeddings___init__
 ```
 
-## `POST /v1/categories/enable` → `enable_route`
-
-`src/controller/category_controller.py:184` · 15 functions · cut short
-
-```mermaid
-flowchart LR
-  src_controller_category_controller_py__enable_route["enable_route<br/>src/controller/category_controller.py"]
-  src_services_sync_service_sync_py__resolve_sync_account_id["resolve_sync_account_id<br/>src/services/sync_service/sync.py"]
-  src_services_category_service_category_py__enable_categorization["enable_categorization<br/>src/services/category_service/category.py"]
-  src_services_category_service_category_py__is_categorization_enabled["is_categorization_enabled<br/>src/services/category_service/category.py"]
-  src_services_category_service_category_py___create_default_categories["_create_default_categories<br/>src/services/category_service/category.py"]
-  src_services_classification_service_tasks_py__classify_pages_task["classify_pages_task<br/>src/services/classification_service/tasks.py"]
-  src_services_classification_service_tasks_py___run_and_dispose["_run_and_dispose<br/>src/services/classification_service/tasks.py"]
-  src_services_classification_service_tasks_py__classify_pages_async["classify_pages_async<br/>src/services/classification_service/tasks.py"]
-  src_services_category_service_category_py__list_categories["list_categories<br/>src/services/category_service/category.py"]
-  src_services_classification_service_tasks_py___get_classification_targets["_get_classification_targets<br/>src/services/classification_service/tasks.py"]
-  src_services_classification_service_classify_py__PageClassifier___init__["PageClassifier.__init__<br/>src/services/classification_service/classify.py"]
-  src_services_llm_service_llm_provider_py__LLMProvider___init__["LLMProvider.__init__<br/>src/services/llm_service/llm_provider.py"]
-  src_utility_provider_py__SecretsProvider_get_openai_api_key["SecretsProvider.get_openai_api_key<br/>src/utility/provider.py"]
-  src_utility_provider_py__SecretsProvider_get_gemini_api_key["SecretsProvider.get_gemini_api_key<br/>src/utility/provider.py"]
-  src_services_llm_service_llm_provider_py__LLMProvider__build_chat_model["LLMProvider._build_chat_model<br/>src/services/llm_service/llm_provider.py"]
-  src_controller_category_controller_py__enable_route --> src_services_category_service_category_py__enable_categorization
-  src_controller_category_controller_py__enable_route --> src_services_classification_service_tasks_py__classify_pages_task
-  src_controller_category_controller_py__enable_route --> src_services_sync_service_sync_py__resolve_sync_account_id
-  src_services_category_service_category_py__enable_categorization --> src_services_category_service_category_py___create_default_categories
-  src_services_category_service_category_py__enable_categorization --> src_services_category_service_category_py__is_categorization_enabled
-  src_services_classification_service_tasks_py___run_and_dispose --> src_services_classification_service_tasks_py__classify_pages_async
-  src_services_classification_service_tasks_py__classify_pages_async --> src_services_category_service_category_py__list_categories
-  src_services_classification_service_tasks_py__classify_pages_async --> src_services_classification_service_classify_py__PageClassifier___init__
-  src_services_classification_service_tasks_py__classify_pages_async --> src_services_classification_service_tasks_py___get_classification_targets
-  src_services_classification_service_tasks_py__classify_pages_async --> src_services_llm_service_llm_provider_py__LLMProvider___init__
-  src_services_classification_service_tasks_py__classify_pages_task --> src_services_classification_service_tasks_py___run_and_dispose
-  src_services_llm_service_llm_provider_py__LLMProvider___init__ --> src_services_llm_service_llm_provider_py__LLMProvider__build_chat_model
-  src_services_llm_service_llm_provider_py__LLMProvider___init__ --> src_utility_provider_py__SecretsProvider_get_gemini_api_key
-  src_services_llm_service_llm_provider_py__LLMProvider___init__ --> src_utility_provider_py__SecretsProvider_get_openai_api_key
-```
-
-## `POST /v1/categories/refresh` → `refresh_route`
-
-`src/controller/category_controller.py:242` · 15 functions · cut short
-
-```mermaid
-flowchart LR
-  src_controller_category_controller_py__refresh_route["refresh_route<br/>src/controller/category_controller.py"]
-  src_services_sync_service_sync_py__resolve_sync_account_id["resolve_sync_account_id<br/>src/services/sync_service/sync.py"]
-  src_services_category_service_category_py__is_categorization_enabled["is_categorization_enabled<br/>src/services/category_service/category.py"]
-  src_services_category_service_category_py__get_refresh_available_at["get_refresh_available_at<br/>src/services/category_service/category.py"]
-  src_services_category_service_category_py__refresh_categorization["refresh_categorization<br/>src/services/category_service/category.py"]
-  src_services_classification_service_tasks_py__classify_pages_task["classify_pages_task<br/>src/services/classification_service/tasks.py"]
-  src_services_classification_service_tasks_py___run_and_dispose["_run_and_dispose<br/>src/services/classification_service/tasks.py"]
-  src_services_classification_service_tasks_py__classify_pages_async["classify_pages_async<br/>src/services/classification_service/tasks.py"]
-  src_services_category_service_category_py__list_categories["list_categories<br/>src/services/category_service/category.py"]
-  src_services_classification_service_tasks_py___get_classification_targets["_get_classification_targets<br/>src/services/classification_service/tasks.py"]
-  src_services_classification_service_classify_py__PageClassifier___init__["PageClassifier.__init__<br/>src/services/classification_service/classify.py"]
-  src_services_llm_service_llm_provider_py__LLMProvider___init__["LLMProvider.__init__<br/>src/services/llm_service/llm_provider.py"]
-  src_utility_provider_py__SecretsProvider_get_openai_api_key["SecretsProvider.get_openai_api_key<br/>src/utility/provider.py"]
-  src_utility_provider_py__SecretsProvider_get_gemini_api_key["SecretsProvider.get_gemini_api_key<br/>src/utility/provider.py"]
-  src_services_llm_service_llm_provider_py__LLMProvider__build_chat_model["LLMProvider._build_chat_model<br/>src/services/llm_service/llm_provider.py"]
-  src_controller_category_controller_py__refresh_route --> src_services_category_service_category_py__get_refresh_available_at
-  src_controller_category_controller_py__refresh_route --> src_services_category_service_category_py__is_categorization_enabled
-  src_controller_category_controller_py__refresh_route --> src_services_category_service_category_py__refresh_categorization
-  src_controller_category_controller_py__refresh_route --> src_services_classification_service_tasks_py__classify_pages_task
-  src_controller_category_controller_py__refresh_route --> src_services_sync_service_sync_py__resolve_sync_account_id
-  src_services_classification_service_tasks_py___run_and_dispose --> src_services_classification_service_tasks_py__classify_pages_async
-  src_services_classification_service_tasks_py__classify_pages_async --> src_services_category_service_category_py__list_categories
-  src_services_classification_service_tasks_py__classify_pages_async --> src_services_classification_service_classify_py__PageClassifier___init__
-  src_services_classification_service_tasks_py__classify_pages_async --> src_services_classification_service_tasks_py___get_classification_targets
-  src_services_classification_service_tasks_py__classify_pages_async --> src_services_llm_service_llm_provider_py__LLMProvider___init__
-  src_services_classification_service_tasks_py__classify_pages_task --> src_services_classification_service_tasks_py___run_and_dispose
-  src_services_llm_service_llm_provider_py__LLMProvider___init__ --> src_services_llm_service_llm_provider_py__LLMProvider__build_chat_model
-  src_services_llm_service_llm_provider_py__LLMProvider___init__ --> src_utility_provider_py__SecretsProvider_get_gemini_api_key
-  src_services_llm_service_llm_provider_py__LLMProvider___init__ --> src_utility_provider_py__SecretsProvider_get_openai_api_key
-```
-
-## `POST /v1/categories/classify` → `classify_route`
-
-`src/controller/category_controller.py:214` · 14 functions · cut short
-
-```mermaid
-flowchart LR
-  src_controller_category_controller_py__classify_route["classify_route<br/>src/controller/category_controller.py"]
-  src_services_sync_service_sync_py__resolve_sync_account_id["resolve_sync_account_id<br/>src/services/sync_service/sync.py"]
-  src_services_category_service_category_py__is_categorization_enabled["is_categorization_enabled<br/>src/services/category_service/category.py"]
-  src_services_classification_service_tasks_py__count_unclassified_pages["count_unclassified_pages<br/>src/services/classification_service/tasks.py"]
-  src_services_classification_service_tasks_py__classify_pages_task["classify_pages_task<br/>src/services/classification_service/tasks.py"]
-  src_services_classification_service_tasks_py___run_and_dispose["_run_and_dispose<br/>src/services/classification_service/tasks.py"]
-  src_services_classification_service_tasks_py__classify_pages_async["classify_pages_async<br/>src/services/classification_service/tasks.py"]
-  src_services_category_service_category_py__list_categories["list_categories<br/>src/services/category_service/category.py"]
-  src_services_classification_service_tasks_py___get_classification_targets["_get_classification_targets<br/>src/services/classification_service/tasks.py"]
-  src_services_classification_service_classify_py__PageClassifier___init__["PageClassifier.__init__<br/>src/services/classification_service/classify.py"]
-  src_services_llm_service_llm_provider_py__LLMProvider___init__["LLMProvider.__init__<br/>src/services/llm_service/llm_provider.py"]
-  src_utility_provider_py__SecretsProvider_get_openai_api_key["SecretsProvider.get_openai_api_key<br/>src/utility/provider.py"]
-  src_utility_provider_py__SecretsProvider_get_gemini_api_key["SecretsProvider.get_gemini_api_key<br/>src/utility/provider.py"]
-  src_services_llm_service_llm_provider_py__LLMProvider__build_chat_model["LLMProvider._build_chat_model<br/>src/services/llm_service/llm_provider.py"]
-  src_controller_category_controller_py__classify_route --> src_services_category_service_category_py__is_categorization_enabled
-  src_controller_category_controller_py__classify_route --> src_services_classification_service_tasks_py__classify_pages_task
-  src_controller_category_controller_py__classify_route --> src_services_classification_service_tasks_py__count_unclassified_pages
-  src_controller_category_controller_py__classify_route --> src_services_sync_service_sync_py__resolve_sync_account_id
-  src_services_classification_service_tasks_py___run_and_dispose --> src_services_classification_service_tasks_py__classify_pages_async
-  src_services_classification_service_tasks_py__classify_pages_async --> src_services_category_service_category_py__list_categories
-  src_services_classification_service_tasks_py__classify_pages_async --> src_services_classification_service_classify_py__PageClassifier___init__
-  src_services_classification_service_tasks_py__classify_pages_async --> src_services_classification_service_tasks_py___get_classification_targets
-  src_services_classification_service_tasks_py__classify_pages_async --> src_services_llm_service_llm_provider_py__LLMProvider___init__
-  src_services_classification_service_tasks_py__classify_pages_task --> src_services_classification_service_tasks_py___run_and_dispose
-  src_services_llm_service_llm_provider_py__LLMProvider___init__ --> src_services_llm_service_llm_provider_py__LLMProvider__build_chat_model
-  src_services_llm_service_llm_provider_py__LLMProvider___init__ --> src_utility_provider_py__SecretsProvider_get_gemini_api_key
-  src_services_llm_service_llm_provider_py__LLMProvider___init__ --> src_utility_provider_py__SecretsProvider_get_openai_api_key
-```
-
 ## `POST /v1/sync/redeem-code` → `redeem_code_route`
 
-`src/controller/sync_controller.py:64` · 9 functions
+`src/controller/sync_controller.py:68` · 9 functions
 
 ```mermaid
 flowchart LR
@@ -200,8 +91,63 @@ flowchart LR
   src_services_sync_service_sync_py__redeem_code --> src_services_sync_service_sync_py___set_sync_account
 ```
 
-_...and 20 more entry points; see the insights JSON (`--json`)._
+## `POST /v1/sync/generate-code` → `generate_code_route`
+
+`src/controller/sync_controller.py:50` · 7 functions
+
+```mermaid
+flowchart LR
+  src_controller_sync_controller_py__generate_code_route["generate_code_route<br/>src/controller/sync_controller.py"]
+  src_services_sync_service_sync_py__generate_code["generate_code<br/>src/services/sync_service/sync.py"]
+  src_services_sync_service_sync_py__resolve_sync_account_id["resolve_sync_account_id<br/>src/services/sync_service/sync.py"]
+  src_services_sync_service_sync_py___delete_expired_codes["_delete_expired_codes<br/>src/services/sync_service/sync.py"]
+  src_services_sync_service_sync_py___apply_device_metadata["_apply_device_metadata<br/>src/services/sync_service/sync.py"]
+  src_services_sync_service_sync_py___normalize_device_name["_normalize_device_name<br/>src/services/sync_service/sync.py"]
+  src_services_sync_service_sync_py___generate_code["_generate_code<br/>src/services/sync_service/sync.py"]
+  src_controller_sync_controller_py__generate_code_route --> src_services_sync_service_sync_py__generate_code
+  src_services_sync_service_sync_py___apply_device_metadata --> src_services_sync_service_sync_py___normalize_device_name
+  src_services_sync_service_sync_py__generate_code --> src_services_sync_service_sync_py___apply_device_metadata
+  src_services_sync_service_sync_py__generate_code --> src_services_sync_service_sync_py___delete_expired_codes
+  src_services_sync_service_sync_py__generate_code --> src_services_sync_service_sync_py___generate_code
+  src_services_sync_service_sync_py__generate_code --> src_services_sync_service_sync_py__resolve_sync_account_id
+```
+
+## `POST /v1/search-stream` → `search_stream`
+
+`src/controller/core_controller.py:332` · 6 functions
+
+```mermaid
+flowchart LR
+  src_controller_core_controller_py__search_stream["search_stream<br/>src/controller/core_controller.py"]
+  src_services_sync_service_sync_py__resolve_sync_account_id["resolve_sync_account_id<br/>src/services/sync_service/sync.py"]
+  src_controller_core_controller_py___annotate_source_browser["_annotate_source_browser<br/>src/controller/core_controller.py"]
+  src_services_sync_service_sync_py__get_device_names["get_device_names<br/>src/services/sync_service/sync.py"]
+  src_services_search_history_service_search_history_py__persist_search["persist_search<br/>src/services/search_history_service/search_history.py"]
+  src_services_search_history_service_search_history_py___trim_to_cap["_trim_to_cap<br/>src/services/search_history_service/search_history.py"]
+  src_controller_core_controller_py___annotate_source_browser --> src_services_sync_service_sync_py__get_device_names
+  src_controller_core_controller_py__search_stream --> src_controller_core_controller_py___annotate_source_browser
+  src_controller_core_controller_py__search_stream --> src_services_search_history_service_search_history_py__persist_search
+  src_controller_core_controller_py__search_stream --> src_services_sync_service_sync_py__resolve_sync_account_id
+  src_services_search_history_service_search_history_py__persist_search --> src_services_search_history_service_search_history_py___trim_to_cap
+```
+
+## `DELETE /v1/user/history` → `clear_history_route`
+
+`src/controller/core_controller.py:490` · 4 functions
+
+```mermaid
+flowchart LR
+  src_controller_core_controller_py__clear_history_route["clear_history_route<br/>src/controller/core_controller.py"]
+  src_services_sync_service_sync_py__resolve_sync_account_id["resolve_sync_account_id<br/>src/services/sync_service/sync.py"]
+  src_services_privacy_service_privacy_py__resolve_history_clear_range["resolve_history_clear_range<br/>src/services/privacy_service/privacy.py"]
+  src_services_privacy_service_privacy_py__clear_history["clear_history<br/>src/services/privacy_service/privacy.py"]
+  src_controller_core_controller_py__clear_history_route --> src_services_privacy_service_privacy_py__clear_history
+  src_controller_core_controller_py__clear_history_route --> src_services_privacy_service_privacy_py__resolve_history_clear_range
+  src_controller_core_controller_py__clear_history_route --> src_services_sync_service_sync_py__resolve_sync_account_id
+```
+
+_...and 16 more entry points; see the insights JSON (`--json`)._
 
 ---
 
-<sub>Generated by [GNOST](https://gnost.readthedocs.io) 0.7.0. Try it on your own code: `uvx gnost onboard .`</sub>
+<sub>Generated by [GNOST](https://gnost.readthedocs.io) 0.7.1. Try it on your own code: `uvx gnost onboard .`</sub>
