@@ -1,37 +1,31 @@
 flowchart TD
+  dir_src_services_task_detection_service["src/services/task_detection_service<br/>1 file"]
   dir_src_utility["src/utility<br/>6 files"]
-  dir_src_controller["src/controller<br/>5 files"]
   dir_src_services_core_service["src/services/core_service<br/>3 files"]
-  dir_src_services_search_history_service["src/services/search_history_service<br/>1 file"]
-  dir_src_services_category_service["src/services/category_service<br/>1 file"]
-  dir_src_db["src/db<br/>2 files"]
+  dir_src_services_ingestion_service["src/services/ingestion_service<br/>1 file"]
   dir_src_services_llm_service["src/services/llm_service<br/>2 files"]
   dir_src_handlers_mappers["src/handlers/mappers<br/>4 files"]
-  dir_src_services_sync_service["src/services/sync_service<br/>1 file"]
+  dir_src_controller["src/controller<br/>4 files"]
   dir_src_services_admin_service["src/services/admin_service<br/>1 file"]
+  dir_src_db["src/db<br/>2 files"]
+  dir_src_services_search_history_service["src/services/search_history_service<br/>1 file"]
   dir_src_services_post_processing_service["src/services/post_processing_service<br/>1 file"]
-  dir_src_handlers["src/handlers<br/>2 files"]
-  dir_src_services_ingestion_service["src/services/ingestion_service<br/>1 file"]
-  dir_src_services_classification_service["src/services/classification_service<br/>2 files"]
   dir_src_services_privacy_service["src/services/privacy_service<br/>1 file"]
-  dir_src["src<br/>1 file"]
-  dir_src_controller --> dir_src
+  dir_src_services_sync_service["src/services/sync_service<br/>1 file"]
+  dir_src_handlers["src/handlers<br/>2 files"]
   dir_src_controller -->|2| dir_src_handlers
   dir_src_controller --> dir_src_services_admin_service
-  dir_src_controller -->|2| dir_src_services_category_service
-  dir_src_controller --> dir_src_services_classification_service
   dir_src_controller --> dir_src_services_core_service
   dir_src_controller --> dir_src_services_ingestion_service
   dir_src_controller -->|2| dir_src_services_privacy_service
   dir_src_controller --> dir_src_services_search_history_service
-  dir_src_controller -->|4| dir_src_services_sync_service
+  dir_src_controller -->|3| dir_src_services_sync_service
   dir_src_handlers -->|2| dir_src_handlers_mappers
-  dir_src_services_classification_service --> dir_src
-  dir_src_services_classification_service --> dir_src_services_category_service
-  dir_src_services_classification_service -->|2| dir_src_services_llm_service
   dir_src_services_core_service -->|3| dir_src_services_llm_service
   dir_src_services_core_service --> dir_src_services_post_processing_service
   dir_src_services_core_service --> dir_src_services_sync_service
+  dir_src_services_core_service --> dir_src_services_task_detection_service
   dir_src_services_ingestion_service -->|2| dir_src_services_llm_service
   dir_src_services_post_processing_service --> dir_src_services_llm_service
   dir_src_services_sync_service --> dir_src_services_ingestion_service
+  dir_src_services_task_detection_service --> dir_src_services_llm_service

@@ -1,7 +1,5 @@
 flowchart TD
-  src_celery_app_py["src/celery_app.py"]
   src_controller_admin_controller_py["src/controller/admin_controller.py"]
-  src_controller_category_controller_py["src/controller/category_controller.py"]
   src_controller_core_controller_py["src/controller/core_controller.py"]
   src_controller_main_controller_py["src/controller/main_controller.py"]
   src_controller_sync_controller_py["src/controller/sync_controller.py"]
@@ -18,9 +16,6 @@ flowchart TD
   src_models_ai_models_py["src/models/ai_models.py"]
   src_models_core_py["src/models/core.py"]
   src_services_admin_service_admin_py["src/services/admin_service/admin.py"]
-  src_services_category_service_category_py["src/services/category_service/category.py"]
-  src_services_classification_service_classify_py["src/services/classification_service/classify.py"]
-  src_services_classification_service_tasks_py["src/services/classification_service/tasks.py"]
   src_services_core_service_fast_search_py["src/services/core_service/fast_search.py"]
   src_services_core_service_main_py["src/services/core_service/main.py"]
   src_services_core_service_rag_py["src/services/core_service/rag.py"]
@@ -31,6 +26,7 @@ flowchart TD
   src_services_privacy_service_privacy_py["src/services/privacy_service/privacy.py"]
   src_services_search_history_service_search_history_py["src/services/search_history_service/search_history.py"]
   src_services_sync_service_sync_py["src/services/sync_service/sync.py"]
+  src_services_task_detection_service_task_detection_py["src/services/task_detection_service/task_detection.py"]
   src_utility_db_log_handler_py["src/utility/db_log_handler.py"]
   src_utility_logger_py["src/utility/logger.py"]
   src_utility_path_finder_py["src/utility/path_finder.py"]
@@ -39,27 +35,16 @@ flowchart TD
   src_utility_settings_py["src/utility/settings.py"]
   src_utility_token_usage_callback_py["src/utility/token_usage_callback.py"]
   src_utility_utils_py["src/utility/utils.py"]
-  src_celery_app_py --> src_utility_settings_py
   src_controller_admin_controller_py --> src_controller_core_controller_py
   src_controller_admin_controller_py --> src_db_models_py
   src_controller_admin_controller_py --> src_db_session_py
   src_controller_admin_controller_py --> src_models_core_py
   src_controller_admin_controller_py --> src_services_admin_service_admin_py
-  src_controller_admin_controller_py --> src_services_category_service_category_py
   src_controller_admin_controller_py --> src_services_privacy_service_privacy_py
   src_controller_admin_controller_py --> src_services_sync_service_sync_py
   src_controller_admin_controller_py --> src_utility_logger_py
   src_controller_admin_controller_py --> src_utility_pricing_py
   src_controller_admin_controller_py --> src_utility_settings_py
-  src_controller_category_controller_py --> src_celery_app_py
-  src_controller_category_controller_py --> src_db_models_py
-  src_controller_category_controller_py --> src_db_session_py
-  src_controller_category_controller_py --> src_models_core_py
-  src_controller_category_controller_py --> src_services_category_service_category_py
-  src_controller_category_controller_py --> src_services_classification_service_tasks_py
-  src_controller_category_controller_py --> src_services_sync_service_sync_py
-  src_controller_category_controller_py --> src_utility_logger_py
-  src_controller_category_controller_py --> src_utility_settings_py
   src_controller_core_controller_py --> src_db_session_py
   src_controller_core_controller_py --> src_handlers_llm_exception_handler_py
   src_controller_core_controller_py --> src_handlers_redis_exception_handler_py
@@ -71,7 +56,6 @@ flowchart TD
   src_controller_core_controller_py --> src_services_sync_service_sync_py
   src_controller_core_controller_py --> src_utility_logger_py
   src_controller_main_controller_py --> src_controller_admin_controller_py
-  src_controller_main_controller_py --> src_controller_category_controller_py
   src_controller_main_controller_py --> src_controller_core_controller_py
   src_controller_main_controller_py --> src_controller_sync_controller_py
   src_controller_main_controller_py --> src_db_session_py
@@ -97,19 +81,6 @@ flowchart TD
   src_handlers_redis_exception_handler_py --> src_handlers_mappers___init___py
   src_services_admin_service_admin_py --> src_db_models_py
   src_services_admin_service_admin_py --> src_utility_settings_py
-  src_services_category_service_category_py --> src_db_models_py
-  src_services_category_service_category_py --> src_utility_settings_py
-  src_services_classification_service_classify_py --> src_services_llm_service_llm_provider_py
-  src_services_classification_service_classify_py --> src_utility_logger_py
-  src_services_classification_service_classify_py --> src_utility_settings_py
-  src_services_classification_service_tasks_py --> src_celery_app_py
-  src_services_classification_service_tasks_py --> src_db_models_py
-  src_services_classification_service_tasks_py --> src_db_session_py
-  src_services_classification_service_tasks_py --> src_services_category_service_category_py
-  src_services_classification_service_tasks_py --> src_services_classification_service_classify_py
-  src_services_classification_service_tasks_py --> src_services_llm_service_llm_provider_py
-  src_services_classification_service_tasks_py --> src_utility_logger_py
-  src_services_classification_service_tasks_py --> src_utility_settings_py
   src_services_core_service_fast_search_py --> src_utility_settings_py
   src_services_core_service_main_py --> src_db_models_py
   src_services_core_service_main_py --> src_models_core_py
@@ -118,6 +89,7 @@ flowchart TD
   src_services_core_service_main_py --> src_services_llm_service_llm_provider_py
   src_services_core_service_main_py --> src_services_post_processing_service_post_processing_py
   src_services_core_service_main_py --> src_services_sync_service_sync_py
+  src_services_core_service_main_py --> src_services_task_detection_service_task_detection_py
   src_services_core_service_main_py --> src_utility_logger_py
   src_services_core_service_main_py --> src_utility_settings_py
   src_services_core_service_rag_py --> src_models_core_py
@@ -154,6 +126,10 @@ flowchart TD
   src_services_sync_service_sync_py --> src_services_ingestion_service_ingestion_py
   src_services_sync_service_sync_py --> src_utility_logger_py
   src_services_sync_service_sync_py --> src_utility_settings_py
+  src_services_task_detection_service_task_detection_py --> src_services_llm_service_llm_provider_py
+  src_services_task_detection_service_task_detection_py --> src_utility_logger_py
+  src_services_task_detection_service_task_detection_py --> src_utility_settings_py
+  src_services_task_detection_service_task_detection_py --> src_utility_token_usage_callback_py
   src_utility_db_log_handler_py --> src_utility_settings_py
   src_utility_logger_py -.-> src_utility_db_log_handler_py
   src_utility_logger_py --> src_utility_settings_py

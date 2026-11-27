@@ -1,3 +1,2 @@
 # Large pages that GNOST rebuilds on demand.
 *.html
-!flow.html

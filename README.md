@@ -1,6 +1,6 @@
 # SurfMind Backend
 
-![Version](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmohdzain98%2Fsurfmind-backend%2Fmain%2Fpyproject.toml&query=%24.project.version&label=version&color=blue) [![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-orange)](LICENSE)
+![Version](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmohdzain98%2Fsurfmind-backend%2Fmain%2Fpyproject.toml&query=%24.project.version&label=version&color=blue) [![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-orange)](LICENSE) ![GNOST score](.gnost/badge.svg)
 
 FastAPI service for SurfMind's retrieval pipeline. It accepts browser history
 and bookmark payloads, caches them in Redis, persists them to Postgres with
